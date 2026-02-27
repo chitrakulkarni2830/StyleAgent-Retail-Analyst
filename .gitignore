@@ -1,0 +1,27 @@
+# Environment variables and secrets
+.env
+
+# SQLite Databases
+*.db
+*.sqlite3
+data/
+outputs/
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Ignore artifacts
+artifacts/

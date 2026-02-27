@@ -1,0 +1,565 @@
+"""
+wardrobe_architect_agent.py — Agent C: The 'Synthesizer'
+Receives trend_brief + style_dna, queries inventory, applies bridge logic,
+curates a complete ensemble with justification, and formats output.
+"""
+
+from __future__ import annotations
+import sqlite3
+import os
+from typing import Optional
+
+from state_schema import StyleState, OutfitItem, FinalRecommendation
+from color_engine import (
+    get_palette_strategy, get_complementary_colors, get_jewelry_metal,
+    suggest_accent_color, validate_rule_of_three, get_color_hex, get_stylists_tip,
+)
+from indian_fashion_kb import (
+    get_occasion_guidance, get_skin_tone_metals, get_style_dna_info,
+)
+from ollama_client import get_client
+
+
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "style_engine.db")
+
+
+class WardrobeArchitectAgent:
+    """
+    The Wardrobe Architect synthesizes trends + user identity into a curated outfit:
+    1. Queries inventory filtered by style_dna AND trending_colors
+    2. Applies the 'Bridge Logic' for trending colors outside user comfort zone
+    3. Enforces the Rule of Three (max 3 colors)
+    4. Curates a full ensemble: Main Piece, Bottom/Layer, Jewelry, Footwear, Accessory
+    5. Generates "The Why" justification
+    6. Calculates trend_alignment_score and availability
+    """
+
+    def __init__(self):
+        self.db_path = DB_PATH
+        self.ollama = get_client()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def curate(self, state: StyleState) -> StyleState:
+        """
+        Execute the Wardrobe Architect pipeline.
+        Produces a complete curated outfit in state.final_recommendation.
+        """
+        state.current_step = "wardrobe_architect"
+        print("\n👗 WARDROBE ARCHITECT — Curating your look...")
+        print("─" * 50)
+
+        conn = self._get_conn()
+        trend_brief = state.trend_brief
+        profile = state.user_style_profile
+
+        occasion = state.occasion or "date_night"
+        sub_occasion = state.sub_occasion
+        gender = state.gender or "female"
+        budget = state.budget or 50000
+        region = state.region
+
+        # Step 1: Get occasion guidance from Indian fashion KB
+        guidance = get_occasion_guidance(occasion, sub_occasion, region, gender)
+        print(f"  📖 Occasion: {guidance.get('display_name', occasion)}")
+        if guidance.get("regional_note"):
+            print(f"  🌍 Regional: {guidance['regional_note']}")
+
+        # Step 2: Determine palette strategy
+        palette_strategy = get_palette_strategy(occasion, guidance.get("vibe", ""))
+        print(f"  🎨 Palette Strategy: {palette_strategy.upper()}")
+
+        # Step 3: Identify target colors (trend + user intersection)
+        trending_colors = trend_brief.trending_colors if trend_brief else guidance.get("colors", [])[:3]
+        user_colors = profile.dominant_colors if profile else []
+        skin_tone = profile.skin_tone if profile else "neutral"
+        style_dna = profile.style_dna if profile else "Fusion Explorer"
+
+        # Bridge Logic: Find overlap and accent opportunities
+        overlap_colors = [c for c in trending_colors if c in user_colors]
+        accent_colors = [c for c in trending_colors if c not in user_colors]
+        user_neutrals = [c for c in user_colors if c in (
+            "Black", "White", "Ivory", "Beige", "Neutral Grey", "Navy Blue", "Charcoal"
+        )]
+
+        print(f"  🔗 Bridge Logic:")
+        print(f"     Overlap: {', '.join(overlap_colors) if overlap_colors else 'None'}")
+        print(f"     Accent opportunity: {', '.join(accent_colors[:2]) if accent_colors else 'None'}")
+
+        # Step 4: Query inventory for main pieces
+        print(f"  🔍 Querying inventory...")
+
+        # Main piece (Top / Full)
+        main_piece = self._find_main_piece(conn, occasion, gender, budget, trending_colors, user_colors, guidance, state.rejected_skus, state.preferred_clothing_type)
+        
+        remaining = budget - (main_piece["price"] if main_piece else 0)
+
+        # Complementary piece (Top or Bottom)
+        complementary_piece = None
+        if main_piece and main_piece["category"] != "Full":
+            target_category = "Top" if main_piece["category"] == "Bottom" else "Bottom"
+            complementary_piece = self._find_piece(conn, target_category, occasion, gender, remaining, user_colors + trending_colors, state.rejected_skus, guidance, state.preferred_clothing_type)
+            remaining -= (complementary_piece["price"] if complementary_piece else 0)
+
+        # Jewelry
+        jewelry_metal = get_jewelry_metal(skin_tone, occasion)
+        jewelry = self._find_jewelry(conn, occasion, gender, jewelry_metal, remaining, state.rejected_skus, state.preferred_jewelry_type)
+        remaining -= (jewelry["price"] if jewelry else 0)
+
+        # Footwear
+        footwear = self._find_footwear(conn, occasion, gender, remaining, state.rejected_skus, guidance)
+        remaining -= (footwear["price"] if footwear else 0)
+
+        # Accessory / Layer
+        accessory = self._find_accessory(conn, occasion, gender, remaining, accent_colors, state.rejected_skus, guidance, state.preferred_accessory_type)
+
+        # Step 5: Build outfit items
+        outfit_items = []
+        primary_colors = []
+
+        if main_piece:
+            item = self._row_to_outfit_item(main_piece, "The Foundation — Main Piece")
+            outfit_items.append(item)
+            primary_colors.append(main_piece["color_family"])
+            print(f"  ✅ Main: {main_piece['name']} ({main_piece['color_family']}, ₹{main_piece['price']:,.0f})")
+
+        if complementary_piece and main_piece and main_piece["category"] != "Full":
+            role_name = f"The Foundation — Complementary {complementary_piece['category']}" 
+            item = self._row_to_outfit_item(complementary_piece, role_name)
+            outfit_items.append(item)
+            primary_colors.append(complementary_piece["color_family"])
+            print(f"  ✅ {complementary_piece['category']}: {complementary_piece['name']} ({complementary_piece['color_family']}, ₹{complementary_piece['price']:,.0f})")
+
+        if jewelry:
+            item = self._row_to_outfit_item(jewelry, "The Accents — Jewelry")
+            outfit_items.append(item)
+            primary_colors.append(jewelry["color_family"])
+            print(f"  ✅ Jewelry: {jewelry['name']} ({jewelry['color_family']}, ₹{jewelry['price']:,.0f})")
+
+        if footwear:
+            item = self._row_to_outfit_item(footwear, "The Finishing Touches — Footwear")
+            outfit_items.append(item)
+            print(f"  ✅ Footwear: {footwear['name']} ({footwear['color_family']}, ₹{footwear['price']:,.0f})")
+
+        if accessory:
+            # Apply Bridge Logic: if accent color available, prefer it
+            is_accent = accessory["color_family"] in accent_colors
+            role = "The Accents — Accent Piece (Trending)" if is_accent else "The Accents — Accessory"
+            item = self._row_to_outfit_item(accessory, role)
+            outfit_items.append(item)
+            if is_accent:
+                primary_colors.append(accessory["color_family"])
+            print(f"  ✅ Accent: {accessory['name']} ({accessory['color_family']}, ₹{accessory['price']:,.0f})")
+
+        # Step 6: Validate Rule of Three
+        color_validation = validate_rule_of_three(primary_colors)
+        print(f"\n  🎨 {color_validation['message']}")
+
+        # Step 7: Calculate total cost & availability
+        total_cost = sum(item.price for item in outfit_items)
+        in_budget = total_cost <= budget
+        availability = "available" if outfit_items else "out_of_stock"
+        print(f"  💰 Total: ₹{total_cost:,.0f} / ₹{budget:,.0f} {'✅' if in_budget else '⚠️ Over budget'}")
+
+        # Step 8: Calculate trend alignment score
+        trend_score = self._calculate_trend_score(outfit_items, trending_colors, trend_brief)
+        print(f"  📊 Trend Alignment: {trend_score}/10")
+
+        # Step 9: Generate "The Why" justification
+        items_for_llm = [
+            {"name": i.name, "color": i.color, "fabric": i.fabric, "category": i.category}
+            for i in outfit_items
+        ]
+        the_why = self.ollama.generate_justification(
+            items_for_llm, occasion, style_dna, trending_colors, skin_tone
+        )
+        print(f"\n  📝 The Why: {the_why}")
+
+        # Step 10: Get stylist tip
+        main_color = primary_colors[0] if primary_colors else "Cobalt Blue"
+        stylist_tip = get_stylists_tip(main_color, palette_strategy, occasion)
+
+        # Step 11: Build color palette hex list
+        color_palette = [get_color_hex(c) for c in primary_colors[:3]]
+
+        # Build accent suggestion if bridge logic was used
+        accent_info = {}
+        if accent_colors and user_neutrals:
+            accent_info = suggest_accent_color(user_neutrals[0], accent_colors[0])
+
+        # Step 12: Assemble the final recommendation
+        recommendation = FinalRecommendation(
+            outfit_items=outfit_items,
+            the_why=the_why,
+            trend_alignment_score=trend_score,
+            inventory_availability_status=availability,
+            palette_strategy=palette_strategy,
+            color_palette=color_palette,
+            accessory_suite={
+                "jewelry_metal": jewelry_metal,
+                "stylist_tip": stylist_tip,
+                "accent_bridge": accent_info.get("suggestion", ""),
+            },
+            occasion=occasion,
+            sub_occasion=sub_occasion,
+        )
+
+        state.final_recommendation = recommendation
+        state.inventory_match = [
+            {"sku": i.sku, "name": i.name, "price": i.price} for i in outfit_items
+        ]
+        state.current_step = "complete"
+
+        conn.close()
+        print("\n" + "─" * 50)
+        print("  ✅ Outfit curated successfully!")
+        print("─" * 50)
+
+        return state
+
+    # ─── INVENTORY QUERY METHODS ───
+
+    def _find_main_piece(
+        self, conn, occasion, gender, budget, trending_colors, user_colors, guidance, rejected, pref_clothing="Any"
+    ) -> Optional[dict]:
+        """Find the main piece (Top/Full) matching occasion, trends, and user preference."""
+        cursor = conn.cursor()
+
+        # Priority 1: Trending color + occasion match
+        color_placeholders = ",".join("?" * len(trending_colors))
+        query = f"""
+            SELECT * FROM current_inventory
+            WHERE category IN ('Top', 'Full', 'Bottom', 'Layer')
+              AND occasion_tags LIKE ?
+              AND gender IN (?, 'unisex')
+              AND price <= ?
+              AND stock_status = 'in_stock'
+              AND (? = 'Any' OR name LIKE ?)
+              AND color_family IN ({color_placeholders})
+              AND sku NOT IN ({','.join('?' * len(rejected))})
+            ORDER BY price DESC
+            LIMIT 5
+        """
+        params = [f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + trending_colors + list(rejected)
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        # Apply fabric filter from guidance
+        preferred_fabrics = guidance.get("fabrics", guidance.get("fabrics_women", guidance.get("fabrics_men", [])))
+        for row in rows:
+            if not preferred_fabrics or row["fabric"] in preferred_fabrics:
+                return dict(row)
+
+        # If strict fabric match fails, return best color match
+        if rows:
+            return dict(rows[0])
+
+        # Priority 2: User's preferred colors + occasion
+        if user_colors:
+            color_placeholders = ",".join("?" * len(user_colors))
+            query = f"""
+                SELECT * FROM current_inventory
+                WHERE category IN ('Top', 'Full', 'Bottom', 'Layer')
+                  AND occasion_tags LIKE ?
+                  AND gender IN (?, 'unisex')
+                  AND price <= ?
+                  AND stock_status = 'in_stock'
+                  AND (? = 'Any' OR name LIKE ?)
+                  AND color_family IN ({color_placeholders})
+                  AND sku NOT IN ({','.join('?' * len(rejected))})
+                ORDER BY price DESC
+                LIMIT 3
+            """
+            params = [f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + user_colors + list(rejected)
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            if rows:
+                return dict(rows[0])
+
+        # Priority 3: Any occasion match
+        query = """
+            SELECT * FROM current_inventory
+            WHERE category IN ('Top', 'Full', 'Bottom', 'Layer')
+              AND occasion_tags LIKE ?
+              AND gender IN (?, 'unisex')
+              AND price <= ?
+              AND stock_status = 'in_stock'
+              AND (? = 'Any' OR name LIKE ?)
+              AND sku NOT IN ({})
+            ORDER BY price DESC
+            LIMIT 1
+        """.format(','.join('?' * len(rejected)))
+        params = [f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + list(rejected)
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def _find_piece(
+        self, conn, category, occasion, gender, budget, colors, rejected, guidance, pref_clothing="Any"
+    ) -> Optional[dict]:
+        """Find a piece by category, preferring matching colors."""
+        cursor = conn.cursor()
+        if colors:
+            color_placeholders = ",".join("?" * len(colors))
+            query = f"""
+                SELECT * FROM current_inventory
+                WHERE category = ?
+                  AND occasion_tags LIKE ?
+                  AND gender IN (?, 'unisex')
+                  AND price <= ?
+                  AND stock_status = 'in_stock'
+                  AND (? = 'Any' OR name LIKE ?)
+                  AND color_family IN ({color_placeholders})
+                  AND sku NOT IN ({','.join('?' * len(rejected))})
+                ORDER BY price ASC
+                LIMIT 1
+            """
+            params = [category, f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + colors + list(rejected)
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+
+        # Fallback: any matching piece
+        query = """
+            SELECT * FROM current_inventory
+            WHERE category = ?
+              AND gender IN (?, 'unisex')
+              AND price <= ?
+              AND stock_status = 'in_stock'
+              AND (? = 'Any' OR name LIKE ?)
+              AND sku NOT IN ({})
+            ORDER BY price ASC
+            LIMIT 1
+        """.format(','.join('?' * len(rejected)))
+        params = [category, gender, budget, pref_clothing, f"%{pref_clothing}%"] + list(rejected)
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def _find_jewelry(self, conn, occasion, gender, metal, budget, rejected, pref_jewelry="Any") -> Optional[dict]:
+        """Find jewelry matching occasion, metal preference, and budget."""
+        cursor = conn.cursor()
+        query = """
+            SELECT * FROM current_inventory
+            WHERE category = 'Jewelry'
+              AND occasion_tags LIKE ?
+              AND gender IN (?, 'unisex')
+              AND price <= ?
+              AND stock_status = 'in_stock'
+              AND (? = 'Any' OR name LIKE ?)
+              AND (fabric LIKE ? OR color_family LIKE ?)
+              AND sku NOT IN ({})
+            ORDER BY price DESC
+            LIMIT 1
+        """.format(','.join('?' * len(rejected)))
+        params = [f"%{occasion}%", gender, budget, pref_jewelry, f"%{pref_jewelry}%", f"%{metal}%", f"%{metal}%"] + list(rejected)
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+
+        if not row:
+            # Fallback: any jewelry for this occasion
+            query = """
+                SELECT * FROM current_inventory
+                WHERE category = 'Jewelry'
+                  AND occasion_tags LIKE ?
+                  AND gender IN (?, 'unisex')
+                  AND price <= ?
+                  AND stock_status = 'in_stock'
+                  AND (? = 'Any' OR name LIKE ?)
+                  AND sku NOT IN ({})
+                ORDER BY price DESC
+                LIMIT 1
+            """.format(','.join('?' * len(rejected)))
+            params = [f"%{occasion}%", gender, budget, pref_jewelry, f"%{pref_jewelry}%"] + list(rejected)
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+
+        return dict(row) if row else None
+
+    def _find_footwear(self, conn, occasion, gender, budget, rejected, guidance) -> Optional[dict]:
+        """Find occasion-appropriate footwear."""
+        cursor = conn.cursor()
+        query = """
+            SELECT * FROM current_inventory
+            WHERE category = 'Footwear'
+              AND occasion_tags LIKE ?
+              AND gender IN (?, 'unisex')
+              AND price <= ?
+              AND stock_status = 'in_stock'
+              AND sku NOT IN ({})
+            ORDER BY price ASC
+            LIMIT 1
+        """.format(','.join('?' * len(rejected)))
+        params = [f"%{occasion}%", gender, budget] + list(rejected)
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def _find_accessory(
+        self, conn, occasion, gender, budget, accent_colors, rejected, guidance, pref_accessory="Any"
+    ) -> Optional[dict]:
+        """Find an accessory, preferring trending accent colors (Bridge Logic)."""
+        cursor = conn.cursor()
+
+        # Priority 1: Accent piece in trending color
+        if accent_colors:
+            color_placeholders = ",".join("?" * len(accent_colors))
+            query = f"""
+                SELECT * FROM current_inventory
+                WHERE category IN ('Accessory', 'Layer')
+                  AND occasion_tags LIKE ?
+                  AND gender IN (?, 'unisex')
+                  AND price <= ?
+                  AND stock_status = 'in_stock'
+                  AND (? = 'Any' OR name LIKE ?)
+                  AND color_family IN ({color_placeholders})
+                  AND sku NOT IN ({','.join('?' * len(rejected))})
+                ORDER BY price ASC
+                LIMIT 1
+            """
+            params = [f"%{occasion}%", gender, budget, pref_accessory, f"%{pref_accessory}%"] + accent_colors + list(rejected)
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+
+        # Priority 2: Any occasion-appropriate accessory
+        query = """
+            SELECT * FROM current_inventory
+            WHERE category IN ('Accessory', 'Layer')
+              AND occasion_tags LIKE ?
+              AND gender IN (?, 'unisex')
+              AND price <= ?
+              AND stock_status = 'in_stock'
+              AND (? = 'Any' OR name LIKE ?)
+              AND sku NOT IN ({})
+            ORDER BY price ASC
+            LIMIT 1
+        """.format(','.join('?' * len(rejected)))
+        params = [f"%{occasion}%", gender, budget, pref_accessory, f"%{pref_accessory}%"] + list(rejected)
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    # ─── SCORING & CONVERSION ───
+
+    def _row_to_outfit_item(self, row: dict, role: str) -> OutfitItem:
+        """Convert a database row to an OutfitItem."""
+        return OutfitItem(
+            sku=row["sku"],
+            name=row["name"],
+            category=row["category"],
+            brand=row.get("brand", ""),
+            price=row["price"],
+            color=row["color_family"],
+            color_hex=row.get("color_hex", ""),
+            fabric=row.get("fabric", ""),
+            image_url=row.get("image_url", ""),
+            product_url=row.get("product_url", ""),
+            style_match_pct=0.0,  # calculated separately
+            role=role,
+        )
+
+    def _calculate_trend_score(self, items: list[OutfitItem], trending_colors: list, trend_brief) -> float:
+        """Calculate trend alignment score (1-10)."""
+        if not items or not trending_colors:
+            return 5.0
+
+        score = 5.0  # base
+
+        # Color alignment (up to +3)
+        item_colors = {i.color for i in items}
+        color_hits = len(item_colors.intersection(set(trending_colors)))
+        score += min(color_hits * 1.5, 3.0)
+
+        # Fabric alignment (up to +2)
+        if trend_brief:
+            item_fabrics = {i.fabric for i in items}
+            fabric_hits = len(item_fabrics.intersection(set(trend_brief.key_fabrics)))
+            score += min(fabric_hits, 2.0)
+
+        return min(round(score, 1), 10.0)
+
+    # ─── LOOKBOOK OUTPUT ───
+
+    def format_lookbook(self, state: StyleState) -> str:
+        """Format the curated outfit as a premium Lookbook Markdown output."""
+        rec = state.final_recommendation
+        if not rec:
+            return "❌ No recommendation available. Run the pipeline first."
+
+        profile = state.user_style_profile
+        lines = []
+        lines.append("=" * 60)
+        lines.append("  ✨ YOUR CURATED LOOKBOOK ✨")
+        lines.append("=" * 60)
+        lines.append("")
+
+        # Occasion & Context
+        lines.append(f"  🎯 Occasion: {rec.occasion.replace('_', ' ').title()}")
+        if rec.sub_occasion:
+            lines.append(f"     Sub: {rec.sub_occasion.replace('_', ' ').title()}")
+        if profile:
+            lines.append(f"  🧬 Style DNA: {profile.style_dna}")
+        lines.append(f"  🎨 Palette: {rec.palette_strategy.upper()}")
+        lines.append(f"  📊 Trend Score: {rec.trend_alignment_score}/10")
+        lines.append(f"  📦 Availability: {rec.inventory_availability_status.upper()}")
+        lines.append("")
+
+        # Group items by role
+        sections = {
+            "🧥 THE FOUNDATION": [],
+            "✨ THE ACCENTS": [],
+            "👠 THE FINISHING TOUCHES": [],
+        }
+
+        for item in rec.outfit_items:
+            if "Foundation" in item.role:
+                sections["🧥 THE FOUNDATION"].append(item)
+            elif "Accent" in item.role or "Jewelry" in item.role:
+                sections["✨ THE ACCENTS"].append(item)
+            else:
+                sections["👠 THE FINISHING TOUCHES"].append(item)
+
+        for section_name, items in sections.items():
+            if items:
+                lines.append(f"  {section_name}")
+                lines.append("  " + "─" * 40)
+                for item in items:
+                    lines.append(f"    • {item.name}")
+                    lines.append(f"      Brand: {item.brand} | Color: {item.color}")
+                    lines.append(f"      Fabric: {item.fabric} | ₹{item.price:,.0f}")
+                    if item.product_url:
+                        lines.append(f"      🔗 Shop: {item.product_url}")
+                    if "Accent Piece (Trending)" in item.role:
+                        lines.append(f"      ⭐ ACCENT: Trending color for this season!")
+                    lines.append("")
+
+        # Total cost
+        total = sum(item.price for item in rec.outfit_items)
+        lines.append(f"  💰 TOTAL: ₹{total:,.0f}")
+        lines.append("")
+
+        # The Why
+        lines.append("  📝 THE STYLIST'S WHY")
+        lines.append("  " + "─" * 40)
+        lines.append(f"  \"{rec.the_why}\"")
+        lines.append("")
+
+        # Stylist Tip
+        if rec.accessory_suite.get("stylist_tip"):
+            lines.append(f"  {rec.accessory_suite['stylist_tip']}")
+            lines.append("")
+
+        # Bridge Logic note
+        if rec.accessory_suite.get("accent_bridge"):
+            lines.append("  🔗 ACCENT BRIDGE")
+            lines.append(f"  {rec.accessory_suite['accent_bridge']}")
+            lines.append("")
+
+        lines.append("=" * 60)
+        return "\n".join(lines)
