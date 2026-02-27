@@ -1,4 +1,38 @@
-pydantic>=2.0
-customtkinter>=5.2
-requests>=2.31
-Pillow>=10.0
+# =============================================================
+# Style Agent — Gold Standard Edition
+# requirements.txt
+#
+# This file lists every external library this project needs.
+# To install everything at once, open your terminal and run:
+#   pip install -r requirements.txt
+#
+# IMPORTANT: Python's built-in libraries (sqlite3, tkinter,
+# json, colorsys, os, sys, threading) do NOT need installing.
+# =============================================================
+
+# --- Web Scraping (for Trend Scout Agent) ---
+# pip install requests
+requests==2.32.3
+
+# pip install beautifulsoup4
+beautifulsoup4==4.12.3
+
+# --- AI Orchestration Framework ---
+# pip install crewai
+crewai==0.86.0
+
+# --- LangGraph (agent workflow state machine) ---
+# pip install langgraph
+langgraph==0.2.61
+
+# --- LangChain Core (needed by LangGraph) ---
+# pip install langchain-core
+langchain-core==0.3.33
+
+# --- Ollama Python client (for local LLM calls) ---
+# pip install ollama
+ollama==0.4.7
+
+# --- Image handling (for colour extraction from images) ---
+# pip install Pillow
+Pillow==11.1.0

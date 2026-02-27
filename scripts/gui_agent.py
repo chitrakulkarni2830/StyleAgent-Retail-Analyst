@@ -212,7 +212,7 @@ class StyleApp(ctk.CTk):
         self.occasion_var = ctk.StringVar(value="wedding")
         self.occasion_menu = ctk.CTkOptionMenu(
             row1, variable=self.occasion_var,
-            values=[o.replace("_", " ").title() for o in OCCASIONS],
+            values=["Wedding", "Brunch", "Corporate Presentation", "Date Night", "Festive", "Travel"],
             font=FONTS["small"], fg_color=COLORS["bg_input"],
             button_color=COLORS["accent_gold_dim"],
             button_hover_color=COLORS["accent_gold"],

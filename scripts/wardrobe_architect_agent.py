@@ -61,10 +61,12 @@ class WardrobeArchitectAgent:
         gender = state.gender or "female"
         budget = state.budget or 50000
         region = state.region
+        color_mood = getattr(state, "color_mood", "Any")
+        vibe_pref = getattr(state, "preferred_vibe", "Any")
 
-        # Step 1: Get occasion guidance from Indian fashion KB
+        # Step 1: Get occasion guidance
         guidance = get_occasion_guidance(occasion, sub_occasion, region, gender)
-        print(f"  📖 Occasion: {guidance.get('display_name', occasion)}")
+        print(f"  📖 Occasion: {guidance.get('display_name', occasion)} | Vibe: {vibe_pref}")
         if guidance.get("regional_note"):
             print(f"  🌍 Regional: {guidance['regional_note']}")
 
@@ -78,123 +80,126 @@ class WardrobeArchitectAgent:
         skin_tone = profile.skin_tone if profile else "neutral"
         style_dna = profile.style_dna if profile else "Fusion Explorer"
 
-        # Bridge Logic: Find overlap and accent opportunities
         overlap_colors = [c for c in trending_colors if c in user_colors]
         accent_colors = [c for c in trending_colors if c not in user_colors]
         user_neutrals = [c for c in user_colors if c in (
             "Black", "White", "Ivory", "Beige", "Neutral Grey", "Navy Blue", "Charcoal"
         )]
 
-        print(f"  🔗 Bridge Logic:")
-        print(f"     Overlap: {', '.join(overlap_colors) if overlap_colors else 'None'}")
-        print(f"     Accent opportunity: {', '.join(accent_colors[:2]) if accent_colors else 'None'}")
-
-        # Step 4: Query inventory for main pieces
         print(f"  🔍 Querying inventory...")
-
-        # Main piece (Top / Full)
-        main_piece = self._find_main_piece(conn, occasion, gender, budget, trending_colors, user_colors, guidance, state.rejected_skus, state.preferred_clothing_type)
-        
-        remaining = budget - (main_piece["price"] if main_piece else 0)
-
-        # Complementary piece (Top or Bottom)
-        complementary_piece = None
-        if main_piece and main_piece["category"] != "Full":
-            target_category = "Top" if main_piece["category"] == "Bottom" else "Bottom"
-            complementary_piece = self._find_piece(conn, target_category, occasion, gender, remaining, user_colors + trending_colors, state.rejected_skus, guidance, state.preferred_clothing_type)
-            remaining -= (complementary_piece["price"] if complementary_piece else 0)
-
-        # Jewelry
-        jewelry_metal = get_jewelry_metal(skin_tone, occasion)
-        jewelry = self._find_jewelry(conn, occasion, gender, jewelry_metal, remaining, state.rejected_skus, state.preferred_jewelry_type)
-        remaining -= (jewelry["price"] if jewelry else 0)
-
-        # Footwear
-        footwear = self._find_footwear(conn, occasion, gender, remaining, state.rejected_skus, guidance)
-        remaining -= (footwear["price"] if footwear else 0)
-
-        # Accessory / Layer
-        accessory = self._find_accessory(conn, occasion, gender, remaining, accent_colors, state.rejected_skus, guidance, state.preferred_accessory_type)
-
-        # Step 5: Build outfit items
         outfit_items = []
         primary_colors = []
+        vibe_hits = 0
+        total_items = 0
 
+        # Step 4: Base Layer (Top/Full + Bottom)
+        main_piece, matched_vibe = self._find_main_piece(conn, occasion, gender, budget, trending_colors, user_colors, guidance, state.rejected_skus, state.preferred_clothing_type, vibe_pref)
+        remaining = budget - (main_piece["price"] if main_piece else 0)
+        
         if main_piece:
-            item = self._row_to_outfit_item(main_piece, "The Foundation — Main Piece")
+            total_items += 1
+            if matched_vibe: vibe_hits += 1
+            item = self._row_to_outfit_item(main_piece, "The Base — Main Piece")
             outfit_items.append(item)
             primary_colors.append(main_piece["color_family"])
-            print(f"  ✅ Main: {main_piece['name']} ({main_piece['color_family']}, ₹{main_piece['price']:,.0f})")
+            print(f"  ✅ Base: {main_piece['name']} ({main_piece['color_family']}, ₹{main_piece['price']:,.0f})")
 
-        if complementary_piece and main_piece and main_piece["category"] != "Full":
-            role_name = f"The Foundation — Complementary {complementary_piece['category']}" 
-            item = self._row_to_outfit_item(complementary_piece, role_name)
+        # Complementary Bottom if needed
+        if main_piece and main_piece["category"] != "Full":
+            target_category = "Top" if main_piece["category"] == "Bottom" else "Bottom"
+            sec_colors = get_secondary_colors(main_piece["color_hex"], palette_strategy, color_mood)
+            comp_piece, comp_matched_vibe = self._find_piece(conn, target_category, occasion, gender, remaining, sec_colors, state.rejected_skus, guidance, state.preferred_clothing_type, vibe_pref)
+            if comp_piece:
+                total_items += 1
+                if comp_matched_vibe: vibe_hits += 1
+                remaining -= comp_piece["price"]
+                item = self._row_to_outfit_item(comp_piece, f"The Base — Complementary {target_category}")
+                outfit_items.append(item)
+                primary_colors.append(comp_piece["color_family"])
+                print(f"  ✅ {target_category}: {comp_piece['name']} ({comp_piece['color_family']}, ₹{comp_piece['price']:,.0f})")
+
+        # Step 5: The Layer (Blazer, Cape, Dupatta)
+        # Attempt to find a layer if budget permits
+        sec_colors = get_secondary_colors(primary_colors[0] if primary_colors else "#808080", palette_strategy, color_mood) if primary_colors else []
+        layer_piece, layer_matched_vibe = self._find_layer(conn, occasion, gender, remaining, sec_colors, state.rejected_skus, vibe_pref)
+        if layer_piece:
+            total_items += 1
+            if layer_matched_vibe: vibe_hits += 1
+            remaining -= layer_piece["price"]
+            item = self._row_to_outfit_item(layer_piece, "The Layer")
             outfit_items.append(item)
-            primary_colors.append(complementary_piece["color_family"])
-            print(f"  ✅ {complementary_piece['category']}: {complementary_piece['name']} ({complementary_piece['color_family']}, ₹{complementary_piece['price']:,.0f})")
+            primary_colors.append(layer_piece["color_family"])
+            print(f"  ✅ Layer: {layer_piece['name']} ({layer_piece['color_family']}, ₹{layer_piece['price']:,.0f})")
 
+        # Step 6: Jewelry
+        jewelry_metal = get_jewelry_metal(skin_tone, occasion)
+        jewelry, jew_matched_vibe = self._find_jewelry(conn, occasion, gender, jewelry_metal, remaining, state.rejected_skus, state.preferred_jewelry_type, vibe_pref)
         if jewelry:
+            total_items += 1
+            if jew_matched_vibe: vibe_hits += 1
+            remaining -= jewelry["price"]
             item = self._row_to_outfit_item(jewelry, "The Accents — Jewelry")
             outfit_items.append(item)
             primary_colors.append(jewelry["color_family"])
             print(f"  ✅ Jewelry: {jewelry['name']} ({jewelry['color_family']}, ₹{jewelry['price']:,.0f})")
 
+        # Step 7: Footwear
+        footwear, ftw_matched_vibe = self._find_footwear(conn, occasion, gender, remaining, state.rejected_skus, guidance, vibe_pref)
         if footwear:
+            total_items += 1
+            if ftw_matched_vibe: vibe_hits += 1
+            remaining -= footwear["price"]
             item = self._row_to_outfit_item(footwear, "The Finishing Touches — Footwear")
             outfit_items.append(item)
             print(f"  ✅ Footwear: {footwear['name']} ({footwear['color_family']}, ₹{footwear['price']:,.0f})")
 
+        # Step 8: Accessory (Bag/Hero)
+        accessory, acc_matched_vibe = self._find_accessory(conn, occasion, gender, remaining, accent_colors, state.rejected_skus, guidance, state.preferred_accessory_type, vibe_pref)
         if accessory:
-            # Apply Bridge Logic: if accent color available, prefer it
+            total_items += 1
+            if acc_matched_vibe: vibe_hits += 1
+            remaining -= accessory["price"]
             is_accent = accessory["color_family"] in accent_colors
-            role = "The Accents — Accent Piece (Trending)" if is_accent else "The Accents — Accessory"
+            role = "The Accents — Hero Accessory" if is_accent else "The Accents — Accessory"
             item = self._row_to_outfit_item(accessory, role)
             outfit_items.append(item)
-            if is_accent:
-                primary_colors.append(accessory["color_family"])
-            print(f"  ✅ Accent: {accessory['name']} ({accessory['color_family']}, ₹{accessory['price']:,.0f})")
+            if is_accent: primary_colors.append(accessory["color_family"])
+            print(f"  ✅ Accessory: {accessory['name']} ({accessory['color_family']}, ₹{accessory['price']:,.0f})")
 
-        # Step 6: Validate Rule of Three
+        # Wrap up stats
         color_validation = validate_rule_of_three(primary_colors)
-        print(f"\n  🎨 {color_validation['message']}")
-
-        # Step 7: Calculate total cost & availability
         total_cost = sum(item.price for item in outfit_items)
         in_budget = total_cost <= budget
         availability = "available" if outfit_items else "out_of_stock"
-        print(f"  💰 Total: ₹{total_cost:,.0f} / ₹{budget:,.0f} {'✅' if in_budget else '⚠️ Over budget'}")
-
-        # Step 8: Calculate trend alignment score
+        
+        confidence_score = (vibe_hits / total_items * 100) if total_items > 0 else 0
         trend_score = self._calculate_trend_score(outfit_items, trending_colors, trend_brief)
+
+        print(f"  💰 Total: ₹{total_cost:,.0f} / ₹{budget:,.0f} {'✅' if in_budget else '⚠️ Over budget'}")
+        print(f"  🎯 Confidence Score: {confidence_score:.0f}% (Vibe Match)")
         print(f"  📊 Trend Alignment: {trend_score}/10")
 
-        # Step 9: Generate "The Why" justification
+        # LLM Justification
         items_for_llm = [
             {"name": i.name, "color": i.color, "fabric": i.fabric, "category": i.category}
             for i in outfit_items
         ]
-        the_why = self.ollama.generate_justification(
-            items_for_llm, occasion, style_dna, trending_colors, skin_tone
-        )
+        the_why = self.ollama.generate_justification(items_for_llm, occasion, style_dna, trending_colors, skin_tone)
         print(f"\n  📝 The Why: {the_why}")
 
-        # Step 10: Get stylist tip
         main_color = primary_colors[0] if primary_colors else "Cobalt Blue"
         stylist_tip = get_stylists_tip(main_color, palette_strategy, occasion)
-
-        # Step 11: Build color palette hex list
         color_palette = [get_color_hex(c) for c in primary_colors[:3]]
 
-        # Build accent suggestion if bridge logic was used
         accent_info = {}
         if accent_colors and user_neutrals:
             accent_info = suggest_accent_color(user_neutrals[0], accent_colors[0])
 
-        # Step 12: Assemble the final recommendation
         recommendation = FinalRecommendation(
             outfit_items=outfit_items,
             the_why=the_why,
             trend_alignment_score=trend_score,
+            confidence_score=confidence_score,
             inventory_availability_status=availability,
             palette_strategy=palette_strategy,
             color_palette=color_palette,
@@ -208,142 +213,111 @@ class WardrobeArchitectAgent:
         )
 
         state.final_recommendation = recommendation
-        state.inventory_match = [
-            {"sku": i.sku, "name": i.name, "price": i.price} for i in outfit_items
-        ]
+        state.inventory_match = [{"sku": i.sku, "name": i.name, "price": i.price} for i in outfit_items]
         state.current_step = "complete"
 
         conn.close()
         print("\n" + "─" * 50)
-        print("  ✅ Outfit curated successfully!")
-        print("─" * 50)
-
         return state
 
     # ─── INVENTORY QUERY METHODS ───
 
-    def _find_main_piece(
-        self, conn, occasion, gender, budget, trending_colors, user_colors, guidance, rejected, pref_clothing="Any"
-    ) -> Optional[dict]:
-        """Find the main piece (Top/Full) matching occasion, trends, and user preference."""
-        cursor = conn.cursor()
-
-        # Priority 1: Trending color + occasion match
-        color_placeholders = ",".join("?" * len(trending_colors))
-        query = f"""
-            SELECT * FROM current_inventory
-            WHERE category IN ('Top', 'Full', 'Bottom', 'Layer')
-              AND occasion_tags LIKE ?
-              AND gender IN (?, 'unisex')
-              AND price <= ?
-              AND stock_status = 'in_stock'
-              AND (? = 'Any' OR name LIKE ?)
-              AND color_family IN ({color_placeholders})
-              AND sku NOT IN ({','.join('?' * len(rejected))})
-            ORDER BY price DESC
-            LIMIT 5
-        """
-        params = [f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + trending_colors + list(rejected)
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-
-        # Apply fabric filter from guidance
-        preferred_fabrics = guidance.get("fabrics", guidance.get("fabrics_women", guidance.get("fabrics_men", [])))
-        for row in rows:
-            if not preferred_fabrics or row["fabric"] in preferred_fabrics:
-                return dict(row)
-
-        # If strict fabric match fails, return best color match
-        if rows:
-            return dict(rows[0])
-
-        # Priority 2: User's preferred colors + occasion
-        if user_colors:
-            color_placeholders = ",".join("?" * len(user_colors))
-            query = f"""
-                SELECT * FROM current_inventory
-                WHERE category IN ('Top', 'Full', 'Bottom', 'Layer')
-                  AND occasion_tags LIKE ?
-                  AND gender IN (?, 'unisex')
-                  AND price <= ?
-                  AND stock_status = 'in_stock'
-                  AND (? = 'Any' OR name LIKE ?)
-                  AND color_family IN ({color_placeholders})
-                  AND sku NOT IN ({','.join('?' * len(rejected))})
-                ORDER BY price DESC
-                LIMIT 3
-            """
-            params = [f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + user_colors + list(rejected)
-            cursor.execute(query, params)
+    def _execute_vibe_query(self, cursor, query_template, params, vibe_pref):
+        """Helper to first attempt strict vibe match, then fallback to any vibe."""
+        if vibe_pref != "Any":
+            strict_query = query_template + " AND vibe = ?"
+            strict_params = params + [vibe_pref]
+            cursor.execute(strict_query + " ORDER BY price DESC LIMIT 5", strict_params)
             rows = cursor.fetchall()
-            if rows:
-                return dict(rows[0])
+            if rows: return rows, True
 
-        # Priority 3: Any occasion match
-        query = """
+        cursor.execute(query_template + " ORDER BY price DESC LIMIT 5", params)
+        return cursor.fetchall(), False
+
+    def _find_main_piece(self, conn, occasion, gender, budget, trending_colors, user_colors, guidance, rejected, pref_clothing, vibe_pref):
+        cursor = conn.cursor()
+        color_placeholders = ",".join("?" * len(trending_colors)) if trending_colors else "''"
+        
+        base_query = f"""
             SELECT * FROM current_inventory
-            WHERE category IN ('Top', 'Full', 'Bottom', 'Layer')
+            WHERE category IN ('Top', 'Full', 'Bottom')
               AND occasion_tags LIKE ?
               AND gender IN (?, 'unisex')
               AND price <= ?
               AND stock_status = 'in_stock'
               AND (? = 'Any' OR name LIKE ?)
-              AND sku NOT IN ({})
-            ORDER BY price DESC
-            LIMIT 1
-        """.format(','.join('?' * len(rejected)))
+              AND sku NOT IN ({','.join('?' * len(rejected))})
+        """
         params = [f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + list(rejected)
-        cursor.execute(query, params)
-        row = cursor.fetchone()
-        return dict(row) if row else None
+        
+        # Try with trending colors
+        if trending_colors:
+            q_trend = base_query + f" AND color_family IN ({color_placeholders})"
+            p_trend = params + trending_colors
+            rows, matched_vibe = self._execute_vibe_query(cursor, q_trend, p_trend, vibe_pref)
+            if rows: return dict(rows[0]), matched_vibe
 
-    def _find_piece(
-        self, conn, category, occasion, gender, budget, colors, rejected, guidance, pref_clothing="Any"
-    ) -> Optional[dict]:
-        """Find a piece by category, preferring matching colors."""
+        # Fallback to user colors
+        if user_colors:
+            q_user = base_query + f" AND color_family IN ({','.join('?' * len(user_colors))})"
+            p_user = params + user_colors
+            rows, matched_vibe = self._execute_vibe_query(cursor, q_user, p_user, vibe_pref)
+            if rows: return dict(rows[0]), matched_vibe
+
+        # Fallback to any color
+        rows, matched_vibe = self._execute_vibe_query(cursor, base_query, params, vibe_pref)
+        return (dict(rows[0]), matched_vibe) if rows else (None, False)
+
+    def _find_piece(self, conn, category, occasion, gender, budget, colors_hex, rejected, guidance, pref_clothing, vibe_pref):
         cursor = conn.cursor()
-        if colors:
-            color_placeholders = ",".join("?" * len(colors))
-            query = f"""
-                SELECT * FROM current_inventory
-                WHERE category = ?
-                  AND occasion_tags LIKE ?
-                  AND gender IN (?, 'unisex')
-                  AND price <= ?
-                  AND stock_status = 'in_stock'
-                  AND (? = 'Any' OR name LIKE ?)
-                  AND color_family IN ({color_placeholders})
-                  AND sku NOT IN ({','.join('?' * len(rejected))})
-                ORDER BY price ASC
-                LIMIT 1
-            """
-            params = [category, f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + colors + list(rejected)
-            cursor.execute(query, params)
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-
-        # Fallback: any matching piece
-        query = """
+        base_query = f"""
             SELECT * FROM current_inventory
             WHERE category = ?
+              AND occasion_tags LIKE ?
               AND gender IN (?, 'unisex')
               AND price <= ?
               AND stock_status = 'in_stock'
               AND (? = 'Any' OR name LIKE ?)
-              AND sku NOT IN ({})
-            ORDER BY price ASC
-            LIMIT 1
-        """.format(','.join('?' * len(rejected)))
-        params = [category, gender, budget, pref_clothing, f"%{pref_clothing}%"] + list(rejected)
-        cursor.execute(query, params)
-        row = cursor.fetchone()
-        return dict(row) if row else None
+              AND sku NOT IN ({','.join('?' * len(rejected))})
+        """
+        params = [category, f"%{occasion}%", gender, budget, pref_clothing, f"%{pref_clothing}%"] + list(rejected)
 
-    def _find_jewelry(self, conn, occasion, gender, metal, budget, rejected, pref_jewelry="Any") -> Optional[dict]:
-        """Find jewelry matching occasion, metal preference, and budget."""
+        if colors_hex:
+            color_placeholders = ",".join("?" * len(colors_hex))
+            q_color = base_query + f" AND color_hex IN ({color_placeholders})"
+            p_color = params + colors_hex
+            rows, matched_vibe = self._execute_vibe_query(cursor, q_color, p_color, vibe_pref)
+            if rows: return dict(rows[0]), matched_vibe
+
+        # Fallback
+        rows, matched_vibe = self._execute_vibe_query(cursor, base_query, params, vibe_pref)
+        return (dict(rows[0]), matched_vibe) if rows else (None, False)
+
+    def _find_layer(self, conn, occasion, gender, budget, colors_hex, rejected, vibe_pref):
         cursor = conn.cursor()
-        query = """
+        base_query = f"""
+            SELECT * FROM current_inventory
+            WHERE category = 'Layer'
+              AND occasion_tags LIKE ?
+              AND gender IN (?, 'unisex')
+              AND price <= ?
+              AND stock_status = 'in_stock'
+              AND sku NOT IN ({','.join('?' * len(rejected))})
+        """
+        params = [f"%{occasion}%", gender, budget] + list(rejected)
+
+        if colors_hex:
+            q_color = base_query + f" AND color_hex IN ({','.join('?' * len(colors_hex))})"
+            p_color = params + colors_hex
+            rows, matched_vibe = self._execute_vibe_query(cursor, q_color, p_color, vibe_pref)
+            if rows: return dict(rows[0]), matched_vibe
+
+        rows, matched_vibe = self._execute_vibe_query(cursor, base_query, params, vibe_pref)
+        return (dict(rows[0]), matched_vibe) if rows else (None, False)
+
+    def _find_jewelry(self, conn, occasion, gender, metal, budget, rejected, pref_jewelry, vibe_pref):
+        cursor = conn.cursor()
+        base_query = f"""
             SELECT * FROM current_inventory
             WHERE category = 'Jewelry'
               AND occasion_tags LIKE ?
@@ -351,99 +325,55 @@ class WardrobeArchitectAgent:
               AND price <= ?
               AND stock_status = 'in_stock'
               AND (? = 'Any' OR name LIKE ?)
-              AND (fabric LIKE ? OR color_family LIKE ?)
-              AND sku NOT IN ({})
-            ORDER BY price DESC
-            LIMIT 1
-        """.format(','.join('?' * len(rejected)))
-        params = [f"%{occasion}%", gender, budget, pref_jewelry, f"%{pref_jewelry}%", f"%{metal}%", f"%{metal}%"] + list(rejected)
-        cursor.execute(query, params)
-        row = cursor.fetchone()
+              AND sku NOT IN ({','.join('?' * len(rejected))})
+        """
+        params = [f"%{occasion}%", gender, budget, pref_jewelry, f"%{pref_jewelry}%"] + list(rejected)
+        
+        q_metal = base_query + " AND (fabric LIKE ? OR color_family LIKE ?)"
+        p_metal = params + [f"%{metal}%", f"%{metal}%"]
+        rows, matched_vibe = self._execute_vibe_query(cursor, q_metal, p_metal, vibe_pref)
+        if rows: return dict(rows[0]), matched_vibe
+        
+        rows, matched_vibe = self._execute_vibe_query(cursor, base_query, params, vibe_pref)
+        return (dict(rows[0]), matched_vibe) if rows else (None, False)
 
-        if not row:
-            # Fallback: any jewelry for this occasion
-            query = """
-                SELECT * FROM current_inventory
-                WHERE category = 'Jewelry'
-                  AND occasion_tags LIKE ?
-                  AND gender IN (?, 'unisex')
-                  AND price <= ?
-                  AND stock_status = 'in_stock'
-                  AND (? = 'Any' OR name LIKE ?)
-                  AND sku NOT IN ({})
-                ORDER BY price DESC
-                LIMIT 1
-            """.format(','.join('?' * len(rejected)))
-            params = [f"%{occasion}%", gender, budget, pref_jewelry, f"%{pref_jewelry}%"] + list(rejected)
-            cursor.execute(query, params)
-            row = cursor.fetchone()
-
-        return dict(row) if row else None
-
-    def _find_footwear(self, conn, occasion, gender, budget, rejected, guidance) -> Optional[dict]:
-        """Find occasion-appropriate footwear."""
+    def _find_footwear(self, conn, occasion, gender, budget, rejected, guidance, vibe_pref):
         cursor = conn.cursor()
-        query = """
+        base_query = f"""
             SELECT * FROM current_inventory
             WHERE category = 'Footwear'
               AND occasion_tags LIKE ?
               AND gender IN (?, 'unisex')
               AND price <= ?
               AND stock_status = 'in_stock'
-              AND sku NOT IN ({})
-            ORDER BY price ASC
-            LIMIT 1
-        """.format(','.join('?' * len(rejected)))
+              AND sku NOT IN ({','.join('?' * len(rejected))})
+        """
         params = [f"%{occasion}%", gender, budget] + list(rejected)
-        cursor.execute(query, params)
-        row = cursor.fetchone()
-        return dict(row) if row else None
+        rows, matched_vibe = self._execute_vibe_query(cursor, base_query, params, vibe_pref)
+        return (dict(rows[0]), matched_vibe) if rows else (None, False)
 
-    def _find_accessory(
-        self, conn, occasion, gender, budget, accent_colors, rejected, guidance, pref_accessory="Any"
-    ) -> Optional[dict]:
-        """Find an accessory, preferring trending accent colors (Bridge Logic)."""
+    def _find_accessory(self, conn, occasion, gender, budget, accent_colors, rejected, guidance, pref_accessory, vibe_pref):
         cursor = conn.cursor()
-
-        # Priority 1: Accent piece in trending color
-        if accent_colors:
-            color_placeholders = ",".join("?" * len(accent_colors))
-            query = f"""
-                SELECT * FROM current_inventory
-                WHERE category IN ('Accessory', 'Layer')
-                  AND occasion_tags LIKE ?
-                  AND gender IN (?, 'unisex')
-                  AND price <= ?
-                  AND stock_status = 'in_stock'
-                  AND (? = 'Any' OR name LIKE ?)
-                  AND color_family IN ({color_placeholders})
-                  AND sku NOT IN ({','.join('?' * len(rejected))})
-                ORDER BY price ASC
-                LIMIT 1
-            """
-            params = [f"%{occasion}%", gender, budget, pref_accessory, f"%{pref_accessory}%"] + accent_colors + list(rejected)
-            cursor.execute(query, params)
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-
-        # Priority 2: Any occasion-appropriate accessory
-        query = """
+        base_query = f"""
             SELECT * FROM current_inventory
-            WHERE category IN ('Accessory', 'Layer')
+            WHERE category = 'Accessory'
               AND occasion_tags LIKE ?
               AND gender IN (?, 'unisex')
               AND price <= ?
               AND stock_status = 'in_stock'
               AND (? = 'Any' OR name LIKE ?)
-              AND sku NOT IN ({})
-            ORDER BY price ASC
-            LIMIT 1
-        """.format(','.join('?' * len(rejected)))
+              AND sku NOT IN ({','.join('?' * len(rejected))})
+        """
         params = [f"%{occasion}%", gender, budget, pref_accessory, f"%{pref_accessory}%"] + list(rejected)
-        cursor.execute(query, params)
-        row = cursor.fetchone()
-        return dict(row) if row else None
+
+        if accent_colors:
+            q_trend = base_query + f" AND color_family IN ({','.join('?' * len(accent_colors))})"
+            p_trend = params + accent_colors
+            rows, matched_vibe = self._execute_vibe_query(cursor, q_trend, p_trend, vibe_pref)
+            if rows: return dict(rows[0]), matched_vibe
+
+        rows, matched_vibe = self._execute_vibe_query(cursor, base_query, params, vibe_pref)
+        return (dict(rows[0]), matched_vibe) if rows else (None, False)
 
     # ─── SCORING & CONVERSION ───
 

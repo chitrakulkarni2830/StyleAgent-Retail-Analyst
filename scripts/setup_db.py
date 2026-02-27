@@ -35,6 +35,9 @@ def create_tables(conn: sqlite3.Connection):
         color_hex TEXT,
         fabric TEXT,
         occasion_tags TEXT,           -- comma-separated: "wedding,sangeet,reception"
+        cut TEXT,
+        fit TEXT,
+        vibe TEXT,
         silhouette TEXT,
         gender TEXT DEFAULT 'unisex', -- male / female / unisex
         region_suitability TEXT,      -- comma-separated: "pune,mumbai,delhi,chennai"
@@ -87,135 +90,135 @@ def create_tables(conn: sqlite3.Connection):
 
 INVENTORY_DATA = [
     # ─── WOMEN'S SAREES ───
-    ("SKU-W-SAR-001", "Royal Kanjeevaram Silk Saree", "Full", "Nalli Silks", 28500, "Maroon", "#800020", "Kanjeevaram Silk", "wedding,reception", "Draped", "female", "chennai,bangalore,mumbai", "heavy"),
-    ("SKU-W-SAR-002", "Emerald Banarasi Brocade Saree", "Full", "Ekaya Banaras", 22000, "Emerald Green", "#046307", "Banarasi Silk", "wedding,reception,diwali", "Draped", "female", "delhi,lucknow,varanasi", "heavy"),
-    ("SKU-W-SAR-003", "Paithani Saree — Purple & Gold", "Full", "Yeola Weavers", 18500, "Royal Purple", "#6A0DAD", "Paithani Silk", "wedding,reception", "Draped", "female", "pune,mumbai,nashik", "heavy"),
-    ("SKU-W-SAR-004", "Lavender Chanderi Silk Saree", "Full", "FabIndia", 6500, "Lavender", "#B57EDC", "Chanderi Silk", "festival,corporate,haldi", "Draped", "female", "pune,indore,bhopal", "light"),
-    ("SKU-W-SAR-005", "Mint Organza Saree with Sequin Border", "Full", "Sabyasachi", 35000, "Mint", "#98FF98", "Organza", "sangeet,cocktail,reception", "Draped", "female", "mumbai,delhi,bangalore", "light"),
-    ("SKU-W-SAR-006", "Navy Blue Tussar Silk Saree", "Full", "Raw Mango", 15000, "Navy Blue", "#000080", "Tussar Silk", "corporate,date_night,diwali", "Draped", "female", "mumbai,delhi,pune", "medium"),
-    ("SKU-W-SAR-007", "Peach Chiffon Saree — Floral", "Full", "Anita Dongre", 12000, "Peach", "#FFDAB9", "Chiffon", "haldi,mehendi,day_wedding", "Draped", "female", "all", "light"),
-    ("SKU-W-SAR-008", "Red Bandhani Silk Saree", "Full", "Asha Gautam", 9800, "Red", "#D2042D", "Bandhani Silk", "navratri,wedding,festival", "Draped", "female", "jaipur,ahmedabad,udaipur", "medium"),
-    ("SKU-W-SAR-009", "Cobalt Blue Silk Saree", "Full", "Raw Mango", 14500, "Cobalt Blue", "#0047AB", "Silk", "sangeet,reception,eid", "Draped", "female", "all", "medium"),
-    ("SKU-W-SAR-010", "Ivory Linen Saree — Chikankari", "Full", "FabIndia", 5500, "Ivory", "#FFFFF0", "Linen", "festival,puja,corporate", "Draped", "female", "lucknow,delhi,pune", "light"),
+    ('SKU-W-SAR-001', 'Royal Kanjeevaram Silk Saree', 'Full', 'Nalli Silks', 28500, 'Maroon', '#800020', 'Kanjeevaram Silk', 'wedding,reception', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'chennai,bangalore,mumbai', 'heavy'),
+    ('SKU-W-SAR-002', 'Emerald Banarasi Brocade Saree', 'Full', 'Ekaya Banaras', 22000, 'Emerald Green', '#046307', 'Banarasi Silk', 'wedding,reception,diwali', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'delhi,lucknow,varanasi', 'heavy'),
+    ('SKU-W-SAR-003', 'Paithani Saree — Purple & Gold', 'Full', 'Yeola Weavers', 18500, 'Royal Purple', '#6A0DAD', 'Paithani Silk', 'wedding,reception', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'pune,mumbai,nashik', 'heavy'),
+    ('SKU-W-SAR-004', 'Lavender Chanderi Silk Saree', 'Full', 'FabIndia', 6500, 'Lavender', '#B57EDC', 'Chanderi Silk', 'festival,corporate,haldi', 'Standard', 'Regular', 'Formal', 'Draped', 'female', 'pune,indore,bhopal', 'light'),
+    ('SKU-W-SAR-005', 'Mint Organza Saree with Sequin Border', 'Full', 'Sabyasachi', 35000, 'Mint', '#98FF98', 'Organza', 'sangeet,cocktail,reception', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'mumbai,delhi,bangalore', 'light'),
+    ('SKU-W-SAR-006', 'Navy Blue Tussar Silk Saree', 'Full', 'Raw Mango', 15000, 'Navy Blue', '#000080', 'Tussar Silk', 'corporate,date_night,diwali', 'Standard', 'Regular', 'Formal', 'Draped', 'female', 'mumbai,delhi,pune', 'medium'),
+    ('SKU-W-SAR-007', 'Peach Chiffon Saree — Floral', 'Full', 'Anita Dongre', 12000, 'Peach', '#FFDAB9', 'Chiffon', 'haldi,mehendi,day_wedding', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'all', 'light'),
+    ('SKU-W-SAR-008', 'Red Bandhani Silk Saree', 'Full', 'Asha Gautam', 9800, 'Red', '#D2042D', 'Bandhani Silk', 'navratri,wedding,festival', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'jaipur,ahmedabad,udaipur', 'medium'),
+    ('SKU-W-SAR-009', 'Cobalt Blue Silk Saree', 'Full', 'Raw Mango', 14500, 'Cobalt Blue', '#0047AB', 'Silk', 'sangeet,reception,eid', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'all', 'medium'),
+    ('SKU-W-SAR-010', 'Ivory Linen Saree — Chikankari', 'Full', 'FabIndia', 5500, 'Ivory', '#FFFFF0', 'Linen', 'festival,puja,corporate', 'Standard', 'Regular', 'Formal', 'Draped', 'female', 'lucknow,delhi,pune', 'light'),
 
     # ─── WOMEN'S LEHENGAS ───
-    ("SKU-W-LEH-001", "Deep Wine Velvet Lehenga", "Full", "Manish Malhotra", 45000, "Deep Wine", "#722F37", "Velvet", "wedding,reception,sangeet", "Flared", "female", "delhi,mumbai,bangalore", "heavy"),
-    ("SKU-W-LEH-002", "Champagne Gold Lehenga — Mirror Work", "Full", "Sabyasachi", 55000, "Gold", "#D4AF37", "Raw Silk", "wedding,sangeet", "Flared", "female", "all", "heavy"),
-    ("SKU-W-LEH-003", "Pastel Pink Organza Lehenga", "Full", "Anita Dongre", 32000, "Pastel Pink", "#FFD1DC", "Organza", "sangeet,cocktail,mehendi", "Flared", "female", "all", "light"),
-    ("SKU-W-LEH-004", "Teal Silk Lehenga — Zardozi", "Full", "Tarun Tahiliani", 38000, "Teal", "#008080", "Silk", "wedding,reception", "A-Line", "female", "all", "medium"),
-    ("SKU-W-LEH-005", "Emerald Green Georgette Lehenga", "Full", "Biba", 12500, "Emerald Green", "#50C878", "Georgette", "wedding,sangeet,festival", "Flared", "female", "all", "medium"),
-    ("SKU-W-LEH-006", "Navy Blue Semi-Stitched Lehenga", "Full", "Utsav Fashion", 3500, "Navy Blue", "#000080", "Art Silk", "wedding,sangeet,festival", "Flared", "female", "all", "medium"),
-    ("SKU-W-LEH-007", "Maroon Unstitched Lehenga", "Full", "Kalki Fashion", 4800, "Maroon", "#800000", "Velvet", "wedding,reception", "A-Line", "female", "all", "heavy"),
-    ("SKU-W-LEH-008", "Yellow Printed Unstitched Lehenga", "Full", "Biba", 2800, "Yellow", "#FFFF00", "Cotton", "haldi,festival", "Flared", "female", "all", "light"),
-    ("SKU-W-LEH-009", "Peach Net Semi-Stitched Lehenga", "Full", "Koskii", 4200, "Peach Fuzz", "#FFCBA4", "Net", "sangeet,cocktail,mehendi", "Flared", "female", "all", "medium"),
+    ('SKU-W-LEH-001', 'Deep Wine Velvet Lehenga', 'Full', 'Manish Malhotra', 45000, 'Deep Wine', '#722F37', 'Velvet', 'wedding,reception,sangeet', 'Flared', 'Regular', 'Ethnic', 'Flared', 'female', 'delhi,mumbai,bangalore', 'heavy'),
+    ('SKU-W-LEH-002', 'Champagne Gold Lehenga — Mirror Work', 'Full', 'Sabyasachi', 55000, 'Gold', '#D4AF37', 'Raw Silk', 'wedding,sangeet', 'Flared', 'Regular', 'Ethnic', 'Flared', 'female', 'all', 'heavy'),
+    ('SKU-W-LEH-003', 'Pastel Pink Organza Lehenga', 'Full', 'Anita Dongre', 32000, 'Pastel Pink', '#FFD1DC', 'Organza', 'sangeet,cocktail,mehendi', 'Flared', 'Regular', 'Ethnic', 'Flared', 'female', 'all', 'light'),
+    ('SKU-W-LEH-004', 'Teal Silk Lehenga — Zardozi', 'Full', 'Tarun Tahiliani', 38000, 'Teal', '#008080', 'Silk', 'wedding,reception', 'Standard', 'Regular', 'Ethnic', 'A-Line', 'female', 'all', 'medium'),
+    ('SKU-W-LEH-005', 'Emerald Green Georgette Lehenga', 'Full', 'Biba', 12500, 'Emerald Green', '#50C878', 'Georgette', 'wedding,sangeet,festival', 'Flared', 'Regular', 'Ethnic', 'Flared', 'female', 'all', 'medium'),
+    ('SKU-W-LEH-006', 'Navy Blue Semi-Stitched Lehenga', 'Full', 'Utsav Fashion', 3500, 'Navy Blue', '#000080', 'Art Silk', 'wedding,sangeet,festival', 'Flared', 'Regular', 'Ethnic', 'Flared', 'female', 'all', 'medium'),
+    ('SKU-W-LEH-007', 'Maroon Unstitched Lehenga', 'Full', 'Kalki Fashion', 4800, 'Maroon', '#800000', 'Velvet', 'wedding,reception', 'Standard', 'Regular', 'Ethnic', 'A-Line', 'female', 'all', 'heavy'),
+    ('SKU-W-LEH-008', 'Yellow Printed Unstitched Lehenga', 'Full', 'Biba', 2800, 'Yellow', '#FFFF00', 'Cotton', 'haldi,festival', 'Flared', 'Regular', 'Ethnic', 'Flared', 'female', 'all', 'light'),
+    ('SKU-W-LEH-009', 'Peach Net Semi-Stitched Lehenga', 'Full', 'Koskii', 4200, 'Peach Fuzz', '#FFCBA4', 'Net', 'sangeet,cocktail,mehendi', 'Flared', 'Regular', 'Ethnic', 'Flared', 'female', 'all', 'medium'),
 
     # ─── WOMEN'S KURTAS / SUITS ───
-    ("SKU-W-KUR-001", "White Chikankari Anarkali", "Top", "FabIndia", 4500, "White", "#FFFFFF", "Cotton", "festival,puja,eid,casual", "Anarkali", "female", "lucknow,delhi,all", "light"),
-    ("SKU-W-KUR-002", "Mustard Yellow Straight Kurta", "Top", "W", 2800, "Mustard Yellow", "#E1A95F", "Cotton Silk", "festival,haldi,mehendi,casual", "Straight", "female", "all", "light"),
-    ("SKU-W-KUR-003", "Bottle Green Silk Kurta — Gota Patti", "Top", "Biba", 3500, "Bottle Green", "#006A4E", "Silk", "diwali,eid,festival", "Straight", "female", "jaipur,delhi,all", "medium"),
-    ("SKU-W-KUR-004", "Coral Georgette Kurta Set", "Top", "Global Desi", 3200, "Coral", "#FF7F50", "Georgette", "haldi,mehendi,casual", "A-Line", "female", "all", "light"),
-    ("SKU-W-KUR-005", "Royal Blue Velvet Kurta", "Top", "Ritu Kumar", 6800, "Royal Blue", "#002366", "Velvet", "diwali,reception,corporate", "Straight", "female", "delhi,mumbai", "medium"),
+    ('SKU-W-KUR-001', 'White Chikankari Anarkali', 'Top', 'FabIndia', 4500, 'White', '#FFFFFF', 'Cotton', 'festival,puja,eid,casual', 'Flared', 'Regular', 'Modern', 'Anarkali', 'female', 'lucknow,delhi,all', 'light'),
+    ('SKU-W-KUR-002', 'Mustard Yellow Straight Kurta', 'Top', 'W', 2800, 'Mustard Yellow', '#E1A95F', 'Cotton Silk', 'festival,haldi,mehendi,casual', 'Straight', 'Regular', 'Modern', 'Straight', 'female', 'all', 'light'),
+    ('SKU-W-KUR-003', 'Bottle Green Silk Kurta — Gota Patti', 'Top', 'Biba', 3500, 'Bottle Green', '#006A4E', 'Silk', 'diwali,eid,festival', 'Straight', 'Regular', 'Ethnic', 'Straight', 'female', 'jaipur,delhi,all', 'medium'),
+    ('SKU-W-KUR-004', 'Coral Georgette Kurta Set', 'Top', 'Global Desi', 3200, 'Coral', '#FF7F50', 'Georgette', 'haldi,mehendi,casual', 'Standard', 'Regular', 'Modern', 'A-Line', 'female', 'all', 'light'),
+    ('SKU-W-KUR-005', 'Royal Blue Velvet Kurta', 'Top', 'Ritu Kumar', 6800, 'Royal Blue', '#002366', 'Velvet', 'diwali,reception,corporate', 'Straight', 'Regular', 'Formal', 'Straight', 'female', 'delhi,mumbai', 'medium'),
 
     # ─── WOMEN'S BOTTOMS ───
-    ("SKU-W-BOT-001", "Gold Brocade Palazzo", "Bottom", "FabIndia", 3200, "Gold", "#D4AF37", "Brocade", "festival,diwali,wedding", "Wide Leg", "female", "all", "medium"),
-    ("SKU-W-BOT-002", "Ivory Silk Sharara", "Bottom", "Biba", 4500, "Ivory", "#FFFFF0", "Silk", "eid,wedding,sangeet", "Flared", "female", "all", "medium"),
-    ("SKU-W-BOT-003", "Black Churidar", "Bottom", "W", 1800, "Black", "#000000", "Cotton Lycra", "corporate,casual,festival", "Slim Fit", "female", "all", "light"),
-    ("SKU-W-BOT-004", "Neutral Grey Trousers", "Bottom", "AND", 2500, "Neutral Grey", "#808080", "Cotton Blend", "corporate,date_night,casual", "Straight", "female", "all", "light"),
-    ("SKU-W-BOT-005", "Maroon Silk Dhoti Pants", "Bottom", "Global Desi", 2800, "Maroon", "#800000", "Silk", "sangeet,cocktail,festival", "Draped", "female", "all", "light"),
+    ('SKU-W-BOT-001', 'Gold Brocade Palazzo', 'Bottom', 'FabIndia', 3200, 'Gold', '#D4AF37', 'Brocade', 'festival,diwali,wedding', 'Standard', 'Regular', 'Ethnic', 'Wide Leg', 'female', 'all', 'medium'),
+    ('SKU-W-BOT-002', 'Ivory Silk Sharara', 'Bottom', 'Biba', 4500, 'Ivory', '#FFFFF0', 'Silk', 'eid,wedding,sangeet', 'Flared', 'Regular', 'Ethnic', 'Flared', 'female', 'all', 'medium'),
+    ('SKU-W-BOT-003', 'Black Churidar', 'Bottom', 'W', 1800, 'Black', '#000000', 'Cotton Lycra', 'corporate,casual,festival', 'Standard', 'Slim Fit', 'Formal', 'Slim Fit', 'female', 'all', 'light'),
+    ('SKU-W-BOT-004', 'Neutral Grey Trousers', 'Bottom', 'AND', 2500, 'Neutral Grey', '#808080', 'Cotton Blend', 'corporate,date_night,casual', 'Straight', 'Regular', 'Formal', 'Straight', 'female', 'all', 'light'),
+    ('SKU-W-BOT-005', 'Maroon Silk Dhoti Pants', 'Bottom', 'Global Desi', 2800, 'Maroon', '#800000', 'Silk', 'sangeet,cocktail,festival', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'all', 'light'),
 
     # ─── WOMEN'S JEWELRY ───
-    ("SKU-W-JEW-001", "Antique Gold Temple Necklace Set", "Jewelry", "Tanishq", 18000, "Gold", "#D4AF37", "Gold", "wedding,reception,diwali", "Traditional", "female", "chennai,bangalore,all", "medium"),
-    ("SKU-W-JEW-002", "Kundan Choker & Jhumka Set", "Jewelry", "Amrapali", 12500, "Gold", "#D4AF37", "Kundan", "wedding,sangeet,reception", "Traditional", "female", "jaipur,delhi,all", "medium"),
-    ("SKU-W-JEW-003", "Rose Gold Minimal Stack Bracelet", "Jewelry", "CaratLane", 8500, "Rose Gold", "#B76E79", "Rose Gold", "date_night,corporate,cocktail,casual", "Modern", "female", "all", "light"),
-    ("SKU-W-JEW-004", "Polki Maang Tikka", "Jewelry", "Amrapali", 6500, "Gold", "#D4AF37", "Polki", "wedding,reception", "Traditional", "female", "all", "light"),
-    ("SKU-W-JEW-005", "Silver Oxidized Jhumkas", "Jewelry", "Tribe by Amrapali", 3200, "Silver", "#C0C0C0", "Silver", "festival,casual,boho", "Ethnic", "female", "all", "light"),
-    ("SKU-W-JEW-006", "Baroque Pearl Drop Earrings", "Jewelry", "Swarovski", 7800, "Pearl White", "#FDEEF4", "Pearls", "cocktail,date_night,corporate", "Modern", "female", "all", "light"),
-    ("SKU-W-JEW-007", "Emerald & Diamond Statement Necklace", "Jewelry", "Tanishq", 35000, "Emerald Green", "#046307", "Gold & Emerald", "wedding,reception", "Traditional", "female", "all", "medium"),
-    ("SKU-W-JEW-008", "Ruby Stud Earrings — 22K Gold", "Jewelry", "Kalyan Jewellers", 15000, "Ruby Red", "#9B111E", "Gold & Ruby", "wedding,diwali,reception", "Traditional", "female", "all", "light"),
+    ('SKU-W-JEW-001', 'Antique Gold Temple Necklace Set', 'Jewelry', 'Tanishq', 18000, 'Gold', '#D4AF37', 'Gold', 'wedding,reception,diwali', 'Standard', 'Regular', 'Ethnic', 'Traditional', 'female', 'chennai,bangalore,all', 'medium'),
+    ('SKU-W-JEW-002', 'Kundan Choker & Jhumka Set', 'Jewelry', 'Amrapali', 12500, 'Gold', '#D4AF37', 'Kundan', 'wedding,sangeet,reception', 'Standard', 'Regular', 'Ethnic', 'Traditional', 'female', 'jaipur,delhi,all', 'medium'),
+    ('SKU-W-JEW-003', 'Rose Gold Minimal Stack Bracelet', 'Jewelry', 'CaratLane', 8500, 'Rose Gold', '#B76E79', 'Rose Gold', 'date_night,corporate,cocktail,casual', 'Standard', 'Regular', 'Modern', 'Modern', 'female', 'all', 'light'),
+    ('SKU-W-JEW-004', 'Polki Maang Tikka', 'Jewelry', 'Amrapali', 6500, 'Gold', '#D4AF37', 'Polki', 'wedding,reception', 'Standard', 'Regular', 'Ethnic', 'Traditional', 'female', 'all', 'light'),
+    ('SKU-W-JEW-005', 'Silver Oxidized Jhumkas', 'Jewelry', 'Tribe by Amrapali', 3200, 'Silver', '#C0C0C0', 'Silver', 'festival,casual,boho', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'female', 'all', 'light'),
+    ('SKU-W-JEW-006', 'Baroque Pearl Drop Earrings', 'Jewelry', 'Swarovski', 7800, 'Pearl White', '#FDEEF4', 'Pearls', 'cocktail,date_night,corporate', 'Standard', 'Regular', 'Modern', 'Modern', 'female', 'all', 'light'),
+    ('SKU-W-JEW-007', 'Emerald & Diamond Statement Necklace', 'Jewelry', 'Tanishq', 35000, 'Emerald Green', '#046307', 'Gold & Emerald', 'wedding,reception', 'Standard', 'Regular', 'Ethnic', 'Traditional', 'female', 'all', 'medium'),
+    ('SKU-W-JEW-008', 'Ruby Stud Earrings — 22K Gold', 'Jewelry', 'Kalyan Jewellers', 15000, 'Ruby Red', '#9B111E', 'Gold & Ruby', 'wedding,diwali,reception', 'Standard', 'Regular', 'Ethnic', 'Traditional', 'female', 'all', 'light'),
 
     # ─── WOMEN'S ACCESSORIES ───
-    ("SKU-W-ACC-001", "Embroidered Potli Bag — Maroon", "Accessory", "Nappa Dori", 3500, "Maroon", "#800000", "Silk", "wedding,sangeet,reception", "Ethnic", "female", "all", "light"),
-    ("SKU-W-ACC-002", "Gold Structured Clutch", "Accessory", "Hidesign", 4500, "Gold", "#D4AF37", "Leather", "cocktail,date_night,reception", "Modern", "female", "all", "light"),
-    ("SKU-W-ACC-003", "Dupatta — Cobalt Blue Georgette", "Accessory", "FabIndia", 1800, "Cobalt Blue", "#0047AB", "Georgette", "festival,casual,eid", "Ethnic", "female", "all", "light"),
-    ("SKU-W-ACC-004", "Silk Stole — Teal with Zari Border", "Accessory", "Good Earth", 4200, "Teal", "#008080", "Silk", "corporate,diwali,date_night", "Modern", "female", "all", "light"),
+    ('SKU-W-ACC-001', 'Embroidered Potli Bag — Maroon', 'Accessory', 'Nappa Dori', 3500, 'Maroon', '#800000', 'Silk', 'wedding,sangeet,reception', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'female', 'all', 'light'),
+    ('SKU-W-ACC-002', 'Gold Structured Clutch', 'Accessory', 'Hidesign', 4500, 'Gold', '#D4AF37', 'Leather', 'cocktail,date_night,reception', 'Standard', 'Regular', 'Modern', 'Modern', 'female', 'all', 'light'),
+    ('SKU-W-ACC-003', 'Dupatta — Cobalt Blue Georgette', 'Accessory', 'FabIndia', 1800, 'Cobalt Blue', '#0047AB', 'Georgette', 'festival,casual,eid', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'female', 'all', 'light'),
+    ('SKU-W-ACC-004', 'Silk Stole — Teal with Zari Border', 'Accessory', 'Good Earth', 4200, 'Teal', '#008080', 'Silk', 'corporate,diwali,date_night', 'Standard', 'Regular', 'Modern', 'Modern', 'female', 'all', 'light'),
 
     # ─── WOMEN'S FOOTWEAR ───
-    ("SKU-W-FTW-001", "Gold Kolhapuri Chappals", "Footwear", "Kolhapuri House", 2200, "Gold", "#D4AF37", "Leather", "festival,casual,haldi", "Ethnic", "female", "pune,mumbai,all", "light"),
-    ("SKU-W-FTW-002", "Embroidered Juttis — Magenta", "Footwear", "Needledust", 3800, "Magenta", "#FF00FF", "Silk", "wedding,sangeet,mehendi", "Ethnic", "female", "all", "light"),
-    ("SKU-W-FTW-003", "Nude Block Heels", "Footwear", "Charles & Keith", 4500, "Nude", "#E8CCBF", "Leather", "cocktail,date_night,corporate,reception", "Modern", "female", "all", "light"),
-    ("SKU-W-FTW-004", "Black Stiletto Sandals", "Footwear", "Jimmy Choo", 12000, "Black", "#000000", "Leather", "cocktail,date_night,reception", "Modern", "female", "all", "light"),
+    ('SKU-W-FTW-001', 'Gold Kolhapuri Chappals', 'Footwear', 'Kolhapuri House', 2200, 'Gold', '#D4AF37', 'Leather', 'festival,casual,haldi', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'female', 'pune,mumbai,all', 'light'),
+    ('SKU-W-FTW-002', 'Embroidered Juttis — Magenta', 'Footwear', 'Needledust', 3800, 'Magenta', '#FF00FF', 'Silk', 'wedding,sangeet,mehendi', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'female', 'all', 'light'),
+    ('SKU-W-FTW-003', 'Nude Block Heels', 'Footwear', 'Charles & Keith', 4500, 'Nude', '#E8CCBF', 'Leather', 'cocktail,date_night,corporate,reception', 'Standard', 'Regular', 'Modern', 'Modern', 'female', 'all', 'light'),
+    ('SKU-W-FTW-004', 'Black Stiletto Sandals', 'Footwear', 'Jimmy Choo', 12000, 'Black', '#000000', 'Leather', 'cocktail,date_night,reception', 'Standard', 'Regular', 'Modern', 'Modern', 'female', 'all', 'light'),
 
     # ─── MEN'S SHERWANIS / KURTAS ───
-    ("SKU-M-SHR-001", "Ivory Silk Sherwani — Gold Embroidery", "Top", "Manyavar", 18000, "Ivory", "#FFFFF0", "Raw Silk", "wedding,reception", "Structured", "male", "all", "heavy"),
-    ("SKU-M-SHR-002", "Emerald Velvet Sherwani", "Top", "Sabyasachi", 45000, "Emerald Green", "#046307", "Velvet", "wedding,sangeet,reception", "Structured", "male", "all", "heavy"),
-    ("SKU-M-SHR-003", "Navy Bandhgala Suit", "Top", "Raymond", 12000, "Navy Blue", "#000080", "Wool Blend", "corporate,reception,date_night", "Structured", "male", "all", "medium"),
-    ("SKU-M-SHR-004", "Maroon Nehru Jacket", "Layer", "FabIndia", 4500, "Maroon", "#800000", "Silk", "diwali,sangeet,corporate,festival", "Structured", "male", "all", "medium"),
-    ("SKU-M-KUR-001", "White Lucknowi Chikan Kurta", "Top", "FabIndia", 3500, "White", "#FFFFFF", "Cotton", "eid,puja,festival,casual", "Straight", "male", "lucknow,delhi,all", "light"),
-    ("SKU-M-KUR-002", "Mustard Silk Kurta — Gota Patti", "Top", "Manyavar", 5500, "Mustard Yellow", "#E1A95F", "Silk", "haldi,mehendi,diwali,navratri", "Straight", "male", "jaipur,all", "medium"),
-    ("SKU-M-KUR-003", "Black Silk Kurta — Minimalist", "Top", "Raw Mango", 6800, "Black", "#000000", "Silk", "diwali,cocktail,reception,date_night", "Straight", "male", "all", "medium"),
-    ("SKU-M-KUR-004", "Cobalt Blue Linen Kurta", "Top", "FabIndia", 3200, "Cobalt Blue", "#0047AB", "Linen", "festival,casual,eid,haldi", "Straight", "male", "all", "light"),
-    ("SKU-M-KUR-005", "Coral Short Kurta", "Top", "Biba Men", 2800, "Coral", "#FF7F50", "Cotton", "mehendi,haldi,casual", "Short", "male", "all", "light"),
-    ("SKU-M-KUR-006", "Bottle Green Velvet Sherwani", "Top", "Manyavar", 22000, "Bottle Green", "#006A4E", "Velvet", "wedding,reception,sangeet", "Structured", "male", "all", "heavy"),
+    ('SKU-M-SHR-001', 'Ivory Silk Sherwani — Gold Embroidery', 'Top', 'Manyavar', 18000, 'Ivory', '#FFFFF0', 'Raw Silk', 'wedding,reception', 'Standard', 'Regular', 'Ethnic', 'Structured', 'male', 'all', 'heavy'),
+    ('SKU-M-SHR-002', 'Emerald Velvet Sherwani', 'Top', 'Sabyasachi', 45000, 'Emerald Green', '#046307', 'Velvet', 'wedding,sangeet,reception', 'Standard', 'Regular', 'Ethnic', 'Structured', 'male', 'all', 'heavy'),
+    ('SKU-M-SHR-003', 'Navy Bandhgala Suit', 'Top', 'Raymond', 12000, 'Navy Blue', '#000080', 'Wool Blend', 'corporate,reception,date_night', 'Standard', 'Regular', 'Formal', 'Structured', 'male', 'all', 'medium'),
+    ('SKU-M-SHR-004', 'Maroon Nehru Jacket', 'Layer', 'FabIndia', 4500, 'Maroon', '#800000', 'Silk', 'diwali,sangeet,corporate,festival', 'Standard', 'Regular', 'Formal', 'Structured', 'male', 'all', 'medium'),
+    ('SKU-M-KUR-001', 'White Lucknowi Chikan Kurta', 'Top', 'FabIndia', 3500, 'White', '#FFFFFF', 'Cotton', 'eid,puja,festival,casual', 'Straight', 'Regular', 'Modern', 'Straight', 'male', 'lucknow,delhi,all', 'light'),
+    ('SKU-M-KUR-002', 'Mustard Silk Kurta — Gota Patti', 'Top', 'Manyavar', 5500, 'Mustard Yellow', '#E1A95F', 'Silk', 'haldi,mehendi,diwali,navratri', 'Straight', 'Regular', 'Ethnic', 'Straight', 'male', 'jaipur,all', 'medium'),
+    ('SKU-M-KUR-003', 'Black Silk Kurta — Minimalist', 'Top', 'Raw Mango', 6800, 'Black', '#000000', 'Silk', 'diwali,cocktail,reception,date_night', 'Straight', 'Regular', 'Minimalist', 'Straight', 'male', 'all', 'medium'),
+    ('SKU-M-KUR-004', 'Cobalt Blue Linen Kurta', 'Top', 'FabIndia', 3200, 'Cobalt Blue', '#0047AB', 'Linen', 'festival,casual,eid,haldi', 'Straight', 'Regular', 'Modern', 'Straight', 'male', 'all', 'light'),
+    ('SKU-M-KUR-005', 'Coral Short Kurta', 'Top', 'Biba Men', 2800, 'Coral', '#FF7F50', 'Cotton', 'mehendi,haldi,casual', 'Crop', 'Regular', 'Modern', 'Short', 'male', 'all', 'light'),
+    ('SKU-M-KUR-006', 'Bottle Green Velvet Sherwani', 'Top', 'Manyavar', 22000, 'Bottle Green', '#006A4E', 'Velvet', 'wedding,reception,sangeet', 'Standard', 'Regular', 'Ethnic', 'Structured', 'male', 'all', 'heavy'),
 
     # ─── MEN'S BOTTOMS ───
-    ("SKU-M-BOT-001", "Ivory Churidar", "Bottom", "Manyavar", 2200, "Ivory", "#FFFFF0", "Cotton Silk", "wedding,festival,eid", "Slim Fit", "male", "all", "light"),
-    ("SKU-M-BOT-002", "Black Slim-Fit Trousers", "Bottom", "Raymond", 3500, "Black", "#000000", "Wool Blend", "corporate,reception,date_night", "Slim Fit", "male", "all", "light"),
-    ("SKU-M-BOT-003", "Beige Linen Pants", "Bottom", "FabIndia", 2800, "Beige", "#F5F5DC", "Linen", "casual,haldi,vacation", "Straight", "male", "all", "light"),
-    ("SKU-M-BOT-004", "White Dhoti Pants", "Bottom", "FabIndia", 2500, "White", "#FFFFFF", "Cotton", "puja,wedding,festival", "Draped", "male", "chennai,all", "light"),
-    ("SKU-M-BOT-005", "Navy Formal Trousers", "Bottom", "Van Heusen", 3200, "Navy Blue", "#000080", "Cotton Blend", "corporate,date_night", "Straight", "male", "all", "light"),
-    ("SKU-M-BOT-006", "Neutral Grey Chinos", "Bottom", "Levi's", 2800, "Neutral Grey", "#808080", "Cotton", "casual,corporate,date_night", "Slim Fit", "male", "all", "light"),
+    ('SKU-M-BOT-001', 'Ivory Churidar', 'Bottom', 'Manyavar', 2200, 'Ivory', '#FFFFF0', 'Cotton Silk', 'wedding,festival,eid', 'Standard', 'Slim Fit', 'Ethnic', 'Slim Fit', 'male', 'all', 'light'),
+    ('SKU-M-BOT-002', 'Black Slim-Fit Trousers', 'Bottom', 'Raymond', 3500, 'Black', '#000000', 'Wool Blend', 'corporate,reception,date_night', 'Standard', 'Slim Fit', 'Formal', 'Slim Fit', 'male', 'all', 'light'),
+    ('SKU-M-BOT-003', 'Beige Linen Pants', 'Bottom', 'FabIndia', 2800, 'Beige', '#F5F5DC', 'Linen', 'casual,haldi,vacation', 'Straight', 'Regular', 'Modern', 'Straight', 'male', 'all', 'light'),
+    ('SKU-M-BOT-004', 'White Dhoti Pants', 'Bottom', 'FabIndia', 2500, 'White', '#FFFFFF', 'Cotton', 'puja,wedding,festival', 'Standard', 'Regular', 'Ethnic', 'Draped', 'male', 'chennai,all', 'light'),
+    ('SKU-M-BOT-005', 'Navy Formal Trousers', 'Bottom', 'Van Heusen', 3200, 'Navy Blue', '#000080', 'Cotton Blend', 'corporate,date_night', 'Straight', 'Regular', 'Formal', 'Straight', 'male', 'all', 'light'),
+    ('SKU-M-BOT-006', 'Neutral Grey Chinos', 'Bottom', "Levi's", 2800, 'Neutral Grey', '#808080', 'Cotton', 'casual,corporate,date_night', 'Standard', 'Slim Fit', 'Formal', 'Slim Fit', 'male', 'all', 'light'),
 
     # ─── MEN'S FOOTWEAR ───
-    ("SKU-M-FTW-001", "Tan Mojris — Embroidered", "Footwear", "Needledust", 3200, "Tan", "#D2B48C", "Leather", "wedding,sangeet,diwali", "Ethnic", "male", "all", "light"),
-    ("SKU-M-FTW-002", "Black Leather Loafers", "Footwear", "Cole Haan", 8500, "Black", "#000000", "Leather", "corporate,reception,date_night", "Modern", "male", "all", "light"),
-    ("SKU-M-FTW-003", "Brown Brogue Oxfords", "Footwear", "Clarks", 7500, "Brown", "#8B4513", "Leather", "corporate,reception,date_night", "Modern", "male", "all", "light"),
-    ("SKU-M-FTW-004", "Gold Juttis — Mirror Work", "Footwear", "Fizzy Goblet", 4500, "Gold", "#D4AF37", "Silk & Leather", "wedding,sangeet", "Ethnic", "male", "all", "light"),
-    ("SKU-M-FTW-005", "Navy Suede Loafers", "Footwear", "Aldo", 6500, "Navy Blue", "#000080", "Suede", "cocktail,date_night,corporate", "Modern", "male", "all", "light"),
+    ('SKU-M-FTW-001', 'Tan Mojris — Embroidered', 'Footwear', 'Needledust', 3200, 'Tan', '#D2B48C', 'Leather', 'wedding,sangeet,diwali', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'male', 'all', 'light'),
+    ('SKU-M-FTW-002', 'Black Leather Loafers', 'Footwear', 'Cole Haan', 8500, 'Black', '#000000', 'Leather', 'corporate,reception,date_night', 'Standard', 'Regular', 'Modern', 'Modern', 'male', 'all', 'light'),
+    ('SKU-M-FTW-003', 'Brown Brogue Oxfords', 'Footwear', 'Clarks', 7500, 'Brown', '#8B4513', 'Leather', 'corporate,reception,date_night', 'Standard', 'Regular', 'Modern', 'Modern', 'male', 'all', 'light'),
+    ('SKU-M-FTW-004', 'Gold Juttis — Mirror Work', 'Footwear', 'Fizzy Goblet', 4500, 'Gold', '#D4AF37', 'Silk & Leather', 'wedding,sangeet', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'male', 'all', 'light'),
+    ('SKU-M-FTW-005', 'Navy Suede Loafers', 'Footwear', 'Aldo', 6500, 'Navy Blue', '#000080', 'Suede', 'cocktail,date_night,corporate', 'Standard', 'Regular', 'Modern', 'Modern', 'male', 'all', 'light'),
 
     # ─── MEN'S ACCESSORIES ───
-    ("SKU-M-ACC-001", "Gold Brooch — Maharaja Style", "Accessory", "Tanishq", 8500, "Gold", "#D4AF37", "Gold", "wedding,reception", "Ethnic", "male", "all", "light"),
-    ("SKU-M-ACC-002", "Silk Pocket Square — Paisley Maroon", "Accessory", "The Tie Hub", 1200, "Maroon", "#800000", "Silk", "corporate,reception,date_night,cocktail", "Modern", "male", "all", "light"),
-    ("SKU-M-ACC-003", "Printed Safa — Red & Gold", "Accessory", "Manyavar", 3500, "Red", "#D2042D", "Cotton Silk", "wedding", "Ethnic", "male", "jaipur,all", "light"),
-    ("SKU-M-ACC-004", "Leather Belt — Black", "Accessory", "Tommy Hilfiger", 3200, "Black", "#000000", "Leather", "corporate,date_night,casual", "Modern", "male", "all", "light"),
-    ("SKU-M-ACC-005", "Premium Watch — Rose Gold", "Accessory", "Titan", 12000, "Rose Gold", "#B76E79", "Metal", "corporate,date_night,reception,cocktail", "Modern", "male", "all", "light"),
-    ("SKU-M-ACC-006", "Stole — Pashmina Beige", "Accessory", "FabIndia", 4500, "Beige", "#F5F5DC", "Pashmina", "wedding,reception,diwali", "Ethnic", "male", "all", "light"),
+    ('SKU-M-ACC-001', 'Gold Brooch — Maharaja Style', 'Accessory', 'Tanishq', 8500, 'Gold', '#D4AF37', 'Gold', 'wedding,reception', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'male', 'all', 'light'),
+    ('SKU-M-ACC-002', 'Silk Pocket Square — Paisley Maroon', 'Accessory', 'The Tie Hub', 1200, 'Maroon', '#800000', 'Silk', 'corporate,reception,date_night,cocktail', 'Standard', 'Regular', 'Modern', 'Modern', 'male', 'all', 'light'),
+    ('SKU-M-ACC-003', 'Printed Safa — Red & Gold', 'Accessory', 'Manyavar', 3500, 'Red', '#D2042D', 'Cotton Silk', 'wedding', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'male', 'jaipur,all', 'light'),
+    ('SKU-M-ACC-004', 'Leather Belt — Black', 'Accessory', 'Tommy Hilfiger', 3200, 'Black', '#000000', 'Leather', 'corporate,date_night,casual', 'Standard', 'Regular', 'Modern', 'Modern', 'male', 'all', 'light'),
+    ('SKU-M-ACC-005', 'Premium Watch — Rose Gold', 'Accessory', 'Titan', 12000, 'Rose Gold', '#B76E79', 'Metal', 'corporate,date_night,reception,cocktail', 'Standard', 'Regular', 'Modern', 'Modern', 'male', 'all', 'light'),
+    ('SKU-M-ACC-006', 'Stole — Pashmina Beige', 'Accessory', 'FabIndia', 4500, 'Beige', '#F5F5DC', 'Pashmina', 'wedding,reception,diwali', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'male', 'all', 'light'),
 
     # ─── MEN'S SHIRTS FOR FUSION ───
-    ("SKU-M-SHI-001", "Cobalt Blue Silk Shirt", "Top", "Zara", 4500, "Cobalt Blue", "#0047AB", "Silk", "cocktail,date_night,sangeet", "Slim Fit", "male", "all", "light"),
-    ("SKU-M-SHI-002", "White Crisp Formal Shirt", "Top", "Van Heusen", 2500, "White", "#FFFFFF", "Cotton", "corporate,reception,date_night", "Classic", "male", "all", "light"),
-    ("SKU-M-SHI-003", "Peach Linen Shirt", "Top", "Linen Club", 3200, "Peach", "#FFDAB9", "Linen", "vacation,haldi,casual,mehendi", "Relaxed", "male", "all", "light"),
-    ("SKU-M-SHI-004", "Black Mandarin Collar Shirt", "Top", "Jack & Jones", 3800, "Black", "#000000", "Cotton", "cocktail,date_night,reception", "Mandarin", "male", "all", "light"),
+    ('SKU-M-SHI-001', 'Cobalt Blue Silk Shirt', 'Top', 'Zara', 4500, 'Cobalt Blue', '#0047AB', 'Silk', 'cocktail,date_night,sangeet', 'Standard', 'Slim Fit', 'Ethnic', 'Slim Fit', 'male', 'all', 'light'),
+    ('SKU-M-SHI-002', 'White Crisp Formal Shirt', 'Top', 'Van Heusen', 2500, 'White', '#FFFFFF', 'Cotton', 'corporate,reception,date_night', 'Standard', 'Regular', 'Formal', 'Classic', 'male', 'all', 'light'),
+    ('SKU-M-SHI-003', 'Peach Linen Shirt', 'Top', 'Linen Club', 3200, 'Peach', '#FFDAB9', 'Linen', 'vacation,haldi,casual,mehendi', 'Standard', 'Relaxed Fit', 'Modern', 'Relaxed', 'male', 'all', 'light'),
+    ('SKU-M-SHI-004', 'Black Mandarin Collar Shirt', 'Top', 'Jack & Jones', 3800, 'Black', '#000000', 'Cotton', 'cocktail,date_night,reception', 'Standard', 'Regular', 'Ethnic', 'Mandarin', 'male', 'all', 'light'),
 
     # ─── UNISEX / LAYERS ───
-    ("SKU-U-LAY-001", "Pashmina Shawl — Deep Wine", "Layer", "Kashmir Loom", 8500, "Deep Wine", "#722F37", "Pashmina", "wedding,reception,diwali", "Draped", "unisex", "delhi,kashmir,all", "light"),
-    ("SKU-U-LAY-002", "Khadi Jacket — Olive Green", "Layer", "Khadi Gram Udyog", 3200, "Olive Green", "#556B2F", "Khadi", "casual,corporate,festival", "Straight", "unisex", "all", "medium"),
-    ("SKU-U-LAY-003", "Silk Dupatta — Magenta & Gold", "Layer", "FabIndia", 2800, "Magenta", "#FF00FF", "Silk", "festival,wedding,sangeet", "Draped", "female", "all", "light"),
-    ("SKU-U-LAY-004", "Linen Nehru Vest — Beige", "Layer", "FabIndia", 3500, "Beige", "#F5F5DC", "Linen", "corporate,casual,festival", "Structured", "male", "all", "light"),
+    ('SKU-U-LAY-001', 'Pashmina Shawl — Deep Wine', 'Layer', 'Kashmir Loom', 8500, 'Deep Wine', '#722F37', 'Pashmina', 'wedding,reception,diwali', 'Standard', 'Regular', 'Ethnic', 'Draped', 'unisex', 'delhi,kashmir,all', 'light'),
+    ('SKU-U-LAY-002', 'Khadi Jacket — Olive Green', 'Layer', 'Khadi Gram Udyog', 3200, 'Olive Green', '#556B2F', 'Khadi', 'casual,corporate,festival', 'Straight', 'Regular', 'Formal', 'Straight', 'unisex', 'all', 'medium'),
+    ('SKU-U-LAY-003', 'Silk Dupatta — Magenta & Gold', 'Layer', 'FabIndia', 2800, 'Magenta', '#FF00FF', 'Silk', 'festival,wedding,sangeet', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'all', 'light'),
+    ('SKU-U-LAY-004', 'Linen Nehru Vest — Beige', 'Layer', 'FabIndia', 3500, 'Beige', '#F5F5DC', 'Linen', 'corporate,casual,festival', 'Standard', 'Regular', 'Formal', 'Structured', 'male', 'all', 'light'),
 
     # ─── ADDITIONAL WOMEN'S TOPS ───
-    ("SKU-W-TOP-001", "Cobalt Blue Silk Blouse — Zari", "Top", "Raw Mango", 5500, "Cobalt Blue", "#0047AB", "Silk", "wedding,sangeet,reception,diwali", "Structured", "female", "all", "medium"),
-    ("SKU-W-TOP-002", "Peach Crop Top — Sequins", "Top", "Indya", 2800, "Peach", "#FFDAB9", "Georgette", "sangeet,cocktail,mehendi", "Crop", "female", "all", "light"),
-    ("SKU-W-TOP-003", "Neutral Grey Silk Top", "Top", "AND", 3500, "Neutral Grey", "#808080", "Silk", "corporate,date_night,casual", "Straight", "female", "all", "light"),
-    ("SKU-W-TOP-004", "Black Bandhgala Jacket — Women's", "Layer", "Raymond", 8500, "Black", "#000000", "Wool Blend", "corporate,reception,cocktail", "Structured", "female", "all", "medium"),
+    ('SKU-W-TOP-001', 'Cobalt Blue Silk Blouse — Zari', 'Top', 'Raw Mango', 5500, 'Cobalt Blue', '#0047AB', 'Silk', 'wedding,sangeet,reception,diwali', 'Standard', 'Regular', 'Ethnic', 'Structured', 'female', 'all', 'medium'),
+    ('SKU-W-TOP-002', 'Peach Crop Top — Sequins', 'Top', 'Indya', 2800, 'Peach', '#FFDAB9', 'Georgette', 'sangeet,cocktail,mehendi', 'Crop', 'Regular', 'Ethnic', 'Crop', 'female', 'all', 'light'),
+    ('SKU-W-TOP-003', 'Neutral Grey Silk Top', 'Top', 'AND', 3500, 'Neutral Grey', '#808080', 'Silk', 'corporate,date_night,casual', 'Straight', 'Regular', 'Formal', 'Straight', 'female', 'all', 'light'),
+    ('SKU-W-TOP-004', "Black Bandhgala Jacket — Women's", 'Layer', 'Raymond', 8500, 'Black', '#000000', 'Wool Blend', 'corporate,reception,cocktail', 'Standard', 'Regular', 'Formal', 'Structured', 'female', 'all', 'medium'),
 
     # ─── ADDITIONAL FESTIVAL / DIWALI SPECIFIC ───
-    ("SKU-W-SAR-011", "Electric Indigo Banarasi Saree", "Full", "Ekaya Banaras", 19500, "Electric Indigo", "#6F00FF", "Banarasi Silk", "diwali,eid,wedding,reception", "Draped", "female", "all", "heavy"),
-    ("SKU-M-KUR-007", "Deep Teal Jacquard Kurta", "Top", "Manyavar", 4800, "Teal", "#008080", "Jacquard", "diwali,eid,festival", "Straight", "male", "all", "medium"),
-    ("SKU-W-KUR-006", "Lavender Chikankari Kurta Set", "Top", "FabIndia", 4200, "Lavender", "#B57EDC", "Cotton", "festival,casual,puja", "A-Line", "female", "lucknow,all", "light"),
+    ('SKU-W-SAR-011', 'Electric Indigo Banarasi Saree', 'Full', 'Ekaya Banaras', 19500, 'Electric Indigo', '#6F00FF', 'Banarasi Silk', 'diwali,eid,wedding,reception', 'Standard', 'Regular', 'Ethnic', 'Draped', 'female', 'all', 'heavy'),
+    ('SKU-M-KUR-007', 'Deep Teal Jacquard Kurta', 'Top', 'Manyavar', 4800, 'Teal', '#008080', 'Jacquard', 'diwali,eid,festival', 'Straight', 'Regular', 'Ethnic', 'Straight', 'male', 'all', 'medium'),
+    ('SKU-W-KUR-006', 'Lavender Chikankari Kurta Set', 'Top', 'FabIndia', 4200, 'Lavender', '#B57EDC', 'Cotton', 'festival,casual,puja', 'Standard', 'Regular', 'Modern', 'A-Line', 'female', 'lucknow,all', 'light'),
 
     # ─── VACATION / CASUAL ───
-    ("SKU-W-DRS-001", "White Linen Maxi Dress", "Full", "Zara", 5500, "White", "#FFFFFF", "Linen", "vacation,casual,brunch", "A-Line", "female", "goa,maldives,all", "light"),
-    ("SKU-M-SHI-005", "Tropical Print Resort Shirt", "Top", "H&M", 2200, "Teal", "#008080", "Rayon", "vacation,casual", "Relaxed", "male", "goa,maldives,all", "light"),
-    ("SKU-W-DRS-002", "Indigo Block Print Kaftan", "Full", "Good Earth", 6800, "Indigo", "#3F00FF", "Cotton", "vacation,casual,brunch", "Relaxed", "female", "all", "light"),
+    ('SKU-W-DRS-001', 'White Linen Maxi Dress', 'Full', 'Zara', 5500, 'White', '#FFFFFF', 'Linen', 'vacation,casual,brunch', 'Standard', 'Regular', 'Modern', 'A-Line', 'female', 'goa,maldives,all', 'light'),
+    ('SKU-M-SHI-005', 'Tropical Print Resort Shirt', 'Top', 'H&M', 2200, 'Teal', '#008080', 'Rayon', 'vacation,casual', 'Standard', 'Relaxed Fit', 'Modern', 'Relaxed', 'male', 'goa,maldives,all', 'light'),
+    ('SKU-W-DRS-002', 'Indigo Block Print Kaftan', 'Full', 'Good Earth', 6800, 'Indigo', '#3F00FF', 'Cotton', 'vacation,casual,brunch', 'Standard', 'Relaxed Fit', 'Modern', 'Relaxed', 'female', 'all', 'light'),
 
     # ─── PREMIUM DATE NIGHT ───
-    ("SKU-W-SAR-012", "Black Sequin Pre-Draped Saree", "Full", "Ridhi Mehra", 24000, "Black", "#000000", "Sequin Georgette", "date_night,cocktail,reception", "Pre-Draped", "female", "mumbai,delhi,all", "medium"),
-    ("SKU-M-BLZ-001", "Charcoal Slim-Fit Blazer", "Layer", "Zara", 8500, "Charcoal", "#36454F", "Wool Blend", "date_night,cocktail,corporate,reception", "Slim Fit", "male", "all", "medium"),
+    ('SKU-W-SAR-012', 'Black Sequin Pre-Draped Saree', 'Full', 'Ridhi Mehra', 24000, 'Black', '#000000', 'Sequin Georgette', 'date_night,cocktail,reception', 'Standard', 'Regular', 'Ethnic', 'Pre-Draped', 'female', 'mumbai,delhi,all', 'medium'),
+    ('SKU-M-BLZ-001', 'Charcoal Slim-Fit Blazer', 'Layer', 'Zara', 8500, 'Charcoal', '#36454F', 'Wool Blend', 'date_night,cocktail,corporate,reception', 'Standard', 'Slim Fit', 'Formal', 'Slim Fit', 'male', 'all', 'medium'),
 
     # ─── HIGH-END WEDDING ADDITIONS ───
-    ("SKU-W-JEW-009", "Jadau Rani Haar — Bridal", "Jewelry", "Tribhovandas Bhimji Zaveri", 85000, "Gold", "#D4AF37", "Gold & Precious Stones", "wedding", "Traditional", "female", "all", "heavy"),
-    ("SKU-W-FTW-005", "Embroidered Wedge Heels — Gold", "Footwear", "Fizzy Goblet", 5500, "Gold", "#D4AF37", "Silk", "wedding,sangeet,reception", "Ethnic", "female", "all", "light"),
-    ("SKU-M-ACC-007", "Diamond Brooch — Solitaire", "Accessory", "Tanishq", 25000, "Diamond", "#B9F2FF", "Platinum & Diamond", "wedding,reception", "Modern", "male", "all", "light"),
+    ('SKU-W-JEW-009', 'Jadau Rani Haar — Bridal', 'Jewelry', 'Tribhovandas Bhimji Zaveri', 85000, 'Gold', '#D4AF37', 'Gold & Precious Stones', 'wedding', 'Standard', 'Regular', 'Ethnic', 'Traditional', 'female', 'all', 'heavy'),
+    ('SKU-W-FTW-005', 'Embroidered Wedge Heels — Gold', 'Footwear', 'Fizzy Goblet', 5500, 'Gold', '#D4AF37', 'Silk', 'wedding,sangeet,reception', 'Standard', 'Regular', 'Ethnic', 'Ethnic', 'female', 'all', 'light'),
+    ('SKU-M-ACC-007', 'Diamond Brooch — Solitaire', 'Accessory', 'Tanishq', 25000, 'Diamond', '#B9F2FF', 'Platinum & Diamond', 'wedding,reception', 'Standard', 'Regular', 'Modern', 'Modern', 'male', 'all', 'light'),
 ]
 
 
@@ -285,8 +288,8 @@ def seed_inventory(conn: sqlite3.Connection):
         cursor.execute("""
             INSERT INTO current_inventory
             (sku, name, category, brand, price, color_family, color_hex, fabric,
-             occasion_tags, silhouette, gender, region_suitability, stock_status, weight_category, product_url, image_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_stock', ?, ?, ?)
+             occasion_tags, cut, fit, vibe, silhouette, gender, region_suitability, stock_status, weight_category, product_url, image_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_stock', ?, ?, ?)
         """, item + (product_url, image_url))
     conn.commit()
     print(f"  ✓ Seeded {len(INVENTORY_DATA)} inventory items (with product links and images)")

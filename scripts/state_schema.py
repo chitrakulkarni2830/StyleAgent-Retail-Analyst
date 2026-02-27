@@ -47,6 +47,10 @@ class OutfitItem(BaseModel):
     product_url: str = ""  # Live clickable link to the product page
     style_match_pct: float = 0.0
     role: str = ""  # "Main Piece" / "Accent Piece" / "Foundation" / etc.
+    cut: str = ""
+    fit: str = ""
+    silhouette: str = ""
+    vibe: str = ""
 
 
 class FinalRecommendation(BaseModel):
@@ -54,6 +58,7 @@ class FinalRecommendation(BaseModel):
     outfit_items: list[OutfitItem] = Field(default_factory=list)
     the_why: str = ""  # 2-sentence justification
     trend_alignment_score: float = 0.0  # 1-10
+    confidence_score: float = 0.0  # 0-100 indicating match to specified vibe
     inventory_availability_status: str = "available"  # available / limited / out_of_stock
     palette_strategy: str = ""  # complementary / analogous / monochromatic
     color_palette: list[str] = Field(default_factory=list)  # hex codes
@@ -85,6 +90,8 @@ class StyleState(BaseModel):
     preferred_clothing_type: str = "Any"
     preferred_accessory_type: str = "Any"
     preferred_jewelry_type: str = "Any"
+    color_mood: str = "Neutral"  # Vibrant / Pastel / Earthy / Neutral
+    preferred_vibe: str = "Any"
     current_step: str = "idle"  # idle / trend_scout / customer_persona / wardrobe_architect / complete
     feedback_history: list[str] = Field(default_factory=list)
     rejected_skus: list[str] = Field(default_factory=list)

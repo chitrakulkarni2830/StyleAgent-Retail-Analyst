@@ -1,0 +1,114 @@
+================================================================
+  Style Agent — Gold Standard Edition
+  SETUP GUIDE FOR COMPLETE BEGINNERS
+================================================================
+
+Hello! This guide will walk you through every step needed
+to run the Style Agent app on your Mac. Take it one step
+at a time — you cannot do it wrong if you follow these steps.
+
+----------------------------------------------------------------
+STEP 1 — CHECK THAT PYTHON IS INSTALLED
+----------------------------------------------------------------
+1. Open your Terminal app (search "Terminal" in Spotlight).
+2. Type this and press Enter:
+      python3 --version
+3. If you see "Python 3.11" or higher, you are ready.
+4. If you see an error, go to https://www.python.org/downloads/
+   and download the latest Python 3 installer for macOS.
+   Run the installer, click through all the default screens.
+
+----------------------------------------------------------------
+STEP 2 — INSTALL OLLAMA (the local AI brain)
+----------------------------------------------------------------
+Ollama runs a free AI model (called llama3) on your own computer.
+No internet needed, no account needed, no API key ever.
+
+1. Go to https://ollama.com and click "Download for Mac".
+2. Open the downloaded file and drag Ollama to your Applications.
+3. Open Ollama from your Applications folder. You will see a
+   small llama icon appear in your Mac menu bar at the top.
+4. Now open Terminal and type this, then press Enter:
+      ollama pull llama3
+5. This will download the llama3 AI model (about 4GB).
+   Wait for it to finish. You only do this once.
+6. Once done, type this to check it works:
+      ollama run llama3 "Say hello"
+   You should see a response from the AI. Press Ctrl+D to exit.
+
+----------------------------------------------------------------
+STEP 3 — NAVIGATE TO THE PROJECT FOLDER
+----------------------------------------------------------------
+1. Open Terminal.
+2. Type this and press Enter (copy it exactly):
+      cd "/Users/chitrakulkarni/Desktop/Data Analyst Projects/StyleAgentRetailAnalyst"
+3. You are now inside the project folder.
+
+----------------------------------------------------------------
+STEP 4 — INSTALL ALL PYTHON LIBRARIES
+----------------------------------------------------------------
+1. In Terminal (still in the project folder), type:
+      pip install -r requirements.txt
+2. Wait for all libraries to download and install.
+   You will see many lines of output — this is normal.
+3. If you see "Successfully installed" at the end, you are done.
+
+TIP: If pip is not found, try "pip3 install -r requirements.txt"
+
+----------------------------------------------------------------
+STEP 5 — CREATE THE DATABASE
+----------------------------------------------------------------
+This step creates the inventory.db file with all the fashion data.
+1. In Terminal, type:
+      python3 database/setup_database.py
+2. You should see:
+      ✅ Tables created successfully
+      ✅ Inventory seeded: 50+ items
+      ✅ Jewellery seeded: 30+ pieces
+      ✅ Sample user and history data inserted
+      ✅ Database ready at: database/inventory.db
+
+----------------------------------------------------------------
+STEP 6 — RUN THE APP
+----------------------------------------------------------------
+1. In Terminal, type:
+      python3 run.py
+2. A window titled "Style Agent — Gold Standard Edition" will open.
+3. Fill in your profile on the left side.
+4. Choose your Occasion and Vibe.
+5. Pick your favourite colours.
+6. Click "✨ Generate My Outfits".
+7. Watch the status bar at the bottom — each agent will update it.
+8. Your 3 outfits with full jewellery kits will appear on the right!
+
+----------------------------------------------------------------
+STEP 7 — SAVE AND EXPORT YOUR OUTFITS
+----------------------------------------------------------------
+- Click "💾 Save This Look" on any outfit card to save it as JSON.
+  → Saved to: outputs/outfit_recommendation.json
+- Click "📊 Export to Tableau" to export all 3 outfits as a CSV.
+  → Saved to: outputs/tableau_export.csv
+- Open Tableau Public (free from tableau.com), click "Connect to File"
+  → Text File → select the CSV → start exploring!
+
+----------------------------------------------------------------
+TROUBLESHOOTING
+----------------------------------------------------------------
+
+Q: The app opens but shows an error about "ModuleNotFoundError"
+A: You missed Step 4. Run: pip install -r requirements.txt
+
+Q: The Generate button does nothing after a few seconds
+A: Make sure Ollama is running. Open the Ollama app from
+   Applications, then try again.
+
+Q: I see "database/inventory.db not found"
+A: You missed Step 5. Run: python3 database/setup_database.py
+
+Q: The window looks plain grey instead of dark
+A: This is a Tkinter display issue. Run: brew install python-tk
+   Then try again.
+
+================================================================
+  Happy Styling! 🌸
+================================================================

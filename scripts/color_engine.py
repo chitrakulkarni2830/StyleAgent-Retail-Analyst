@@ -157,9 +157,22 @@ def get_complementary_colors(primary_color: str, count: int = 2) -> list[str]:
     return pairings[:count]
 
 
-def get_secondary_colors(primary_hex: str, strategy: str) -> list[str]:
-    """Given a primary color hex, return 2 recommended secondary hex codes."""
-    # Find the color name from hex
+def _get_color_mood(color_name: str) -> str:
+    """Classify an existing color in the DB into one of our 4 UI Moods."""
+    info = COLOR_DB.get(color_name, {})
+    family = info.get("family", "neutral")
+    if family == "pastel":
+        return "Pastel"
+    elif family in ("earth", "warm"):
+        return "Earthy"
+    elif family in ("jewel", "bold"):
+        return "Vibrant"
+    else:
+        return "Neutral"
+
+
+def get_secondary_colors(primary_hex: str, strategy: str, requested_mood: str = "Any") -> list[str]:
+    """Given a primary color hex and strategy, return 2 recommended secondary hex codes masked by mood."""
     color_name = None
     for name, info in COLOR_DB.items():
         if info["hex"].lower() == primary_hex.lower():
@@ -169,18 +182,27 @@ def get_secondary_colors(primary_hex: str, strategy: str) -> list[str]:
     if not color_name:
         return ["#D4AF37", "#FFFFF0"]  # Default: Gold + Ivory
 
+    def _matches_mood(c_name: str) -> bool:
+        if requested_mood == "Any" or requested_mood == "Neutral":
+            return True # Neutral requested means don't strictly ban things if we run out, or Any
+        return _get_color_mood(c_name) == requested_mood or _get_color_mood(c_name) == "Neutral"
+
     if strategy == "monochromatic":
-        # Return shades within the same warmth
+        # Return shades within the same warmth, prioritizing the requested mood
         warmth = COLOR_DB[color_name]["warmth"]
         matches = [
             info["hex"] for name, info in COLOR_DB.items()
-            if info["warmth"] == warmth and name != color_name and info["family"] == "neutral"
+            if info["warmth"] == warmth and name != color_name and _matches_mood(name)
         ]
-        return matches[:2] if matches else ["#D4AF37", "#FFFFF0"]
+        return matches[:2] if len(matches) >= 2 else ["#D4AF37", "#FFFFF0"]
 
     elif strategy == "complementary":
         comps = COMPLEMENTARY_PAIRINGS.get(color_name, ["Gold", "Ivory"])
-        return [COLOR_DB[c]["hex"] for c in comps[:2] if c in COLOR_DB]
+        matches = [COLOR_DB[c]["hex"] for c in comps if c in COLOR_DB and _matches_mood(c)]
+        # Fallback if mood masking strips all complementary colors
+        if not matches:
+             matches = [COLOR_DB[c]["hex"] for c in comps if c in COLOR_DB]
+        return matches[:2] if len(matches) >= 2 else ["#D4AF37", "#FFFFF0"]
 
     else:  # analogous
         warmth = COLOR_DB[color_name]["warmth"]
@@ -188,9 +210,15 @@ def get_secondary_colors(primary_hex: str, strategy: str) -> list[str]:
         matches = [
             info["hex"] for name, info in COLOR_DB.items()
             if (info["warmth"] == warmth or info["family"] == family)
-            and name != color_name
+            and name != color_name and _matches_mood(name)
         ]
-        return matches[:2] if matches else ["#D4AF37", "#FFFFF0"]
+        if not matches:
+            matches = [
+                info["hex"] for name, info in COLOR_DB.items()
+                if (info["warmth"] == warmth or info["family"] == family)
+                and name != color_name
+            ]
+        return matches[:2] if len(matches) >= 2 else ["#D4AF37", "#FFFFF0"]
 
 
 def get_jewelry_metal(skin_tone: str, occasion: str = "") -> str:
