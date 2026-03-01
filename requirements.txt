@@ -10,12 +10,15 @@
 # json, colorsys, os, sys, threading) do NOT need installing.
 # =============================================================
 
-# --- Web Scraping (for Trend Scout Agent) ---
+# --- Web Scraping (Trend Scout Agent + Live Link Scraper) ---
 # pip install requests
 requests==2.32.3
 
 # pip install beautifulsoup4
 beautifulsoup4==4.12.3
+
+# webbrowser is built into Python — no install needed
+# (used by gui/tkinter_app.py to open shopping links in the browser)
 
 # --- AI Orchestration Framework ---
 # pip install crewai

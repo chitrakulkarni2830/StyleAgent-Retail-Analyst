@@ -169,9 +169,6 @@ def launch_gui():
         print("    python run.py")
         sys.exit(1)
 
-    except tk_error := Exception() if False else None:
-        pass  # just a placeholder; real errors caught below
-
     except Exception as gui_error:
         print(f"\n  ❌ GUI error: {gui_error}")
         import traceback

@@ -398,3 +398,113 @@ class ColourEngineAgent:
 
         print(f"  ✅ Generated 3 palettes: {option_a['harmony_type']} | Triadic | Split Complementary")
         return palettes  # return the list of 3 palette dicts
+
+
+# =============================================================
+# MODULE-LEVEL HELPER: hex_to_colour_family
+# Maps any hex colour to the nearest named colour family.
+# Used by the wardrobe architect to find matching inventory items
+# even when the user picks a custom hex that doesn't appear in the DB.
+# =============================================================
+def hex_to_colour_family(hex_code):
+    """
+    Takes any hex colour code and returns the nearest colour family name
+    plus a list of colour names to search for in the inventory database.
+
+    Example: #FF6B35 → family "warm" → ["rust","burnt orange","terracotta","coral"]
+
+    hex_code: string like "#FF6B35" or "FF6B35"
+    Returns: (family_string, [list_of_colour_name_strings])
+    """
+    # Remove the # symbol if present so we can parse the hex digits
+    hex_code = hex_code.lstrip("#")
+
+    # Guard: if the hex is invalid, return a safe default
+    if len(hex_code) != 6:
+        return "neutral", ["white", "ivory", "beige", "cream"]
+
+    # Convert each pair of hex digits to a 0-1 float for colorsys
+    r = int(hex_code[0:2], 16) / 255.0   # red channel
+    g = int(hex_code[2:4], 16) / 255.0   # green channel
+    b = int(hex_code[4:6], 16) / 255.0   # blue channel
+
+    # Convert RGB to HSV (hue, saturation, value)
+    # colorsys.rgb_to_hsv returns values from 0.0 to 1.0
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    hue_degrees = h * 360   # convert hue to 0-360 degrees on the colour wheel
+
+    # ── Low saturation = greyscale / neutral ──────────────────
+    # If a colour is mostly grey (low saturation), classify by brightness
+    if s < 0.15:
+        if v > 0.85:
+            return "white", ["white", "ivory", "off-white", "cream"]    # very light grey = white family
+        elif v < 0.25:
+            return "black", ["black", "charcoal", "charcoal grey", "dark grey"]  # very dark = black family
+        else:
+            return "neutral", ["beige", "nude", "grey", "camel", "taupe"]     # mid grey = neutral
+
+    # ── Very dark with some colour = earth/deep tones ─────────
+    if v < 0.35:
+        return "earth", ["brown", "dark brown", "maroon", "espresso", "burgundy"]
+
+    # ── Light and desaturated = pastel family ─────────────────
+    # Pastel = bright (high value) but not vivid (medium-low saturation)
+    if v > 0.80 and s < 0.45:
+        return "pastel", ["blush pink", "powder blue", "lavender", "mint green", "peach", "pale yellow"]
+
+    # ── Classify by hue angle ─────────────────────────────────
+    # Red (wraps around both ends of the 0-360 scale)
+    if hue_degrees < 15 or hue_degrees >= 345:
+        return "warm", ["deep red", "red", "crimson", "maroon", "burgundy"]
+
+    # Orange-red / rust zone
+    elif hue_degrees < 45:
+        return "warm", ["rust", "burnt orange", "terracotta", "brick red", "coral"]
+
+    # Orange / amber / mustard zone
+    elif hue_degrees < 75:
+        return "warm", ["burnt orange", "mustard yellow", "amber", "gold", "ochre"]
+
+    # Yellow-green / chartreuse zone
+    elif hue_degrees < 105:
+        return "warm", ["mustard yellow", "olive green", "yellow", "chartreuse"]
+
+    # Green zone
+    elif hue_degrees < 150:
+        return "cool", ["sage green", "olive green", "emerald green", "forest green", "green"]
+
+    # Teal / cyan zone
+    elif hue_degrees < 195:
+        return "cool", ["teal", "turquoise", "seafoam", "jade green", "mint green"]
+
+    # Blue zone (sky → cobalt → royal)
+    elif hue_degrees < 240:
+        return "cool", ["cobalt blue", "royal blue", "sky blue", "steel blue", "powder blue"]
+
+    # Deep blue / indigo zone
+    elif hue_degrees < 270:
+        return "cool", ["navy blue", "navy", "indigo", "cobalt blue", "periwinkle"]
+
+    # Purple / violet zone
+    elif hue_degrees < 300:
+        return "cool", ["lavender", "purple", "violet", "mauve", "deep purple"]
+
+    # Pink / magenta zone
+    else:
+        return "cool", ["blush pink", "rose", "hot pink", "magenta", "fuchsia"]
+
+
+def get_colour_names_for_search(hex_code):
+    """
+    Convenience wrapper around hex_to_colour_family.
+    Returns just the list of colour names to try in database searches.
+
+    Example: get_colour_names_for_search("#1E90FF")
+      → ["cobalt blue", "royal blue", "sky blue", "steel blue", "powder blue"]
+
+    The wardrobe architect tries each name in order until it finds inventory matches.
+    hex_code: any hex string e.g. "#C67C5A" or "C67C5A"
+    Returns: list of colour name strings (ordered priority — best match first)
+    """
+    _family, colour_names = hex_to_colour_family(hex_code)   # unpack the tuple
+    return colour_names   # return just the list

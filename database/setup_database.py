@@ -790,6 +790,368 @@ def seed_user_data(connection):
 
 
 # =============================================================
+# FUNCTION: seed_inventory_with_full_coverage
+# Adds 40+ extra items so EVERY colour family + vibe + occasion
+# combination always finds at least one match.
+# Run this after seed_inventory() to ensure broad coverage.
+# =============================================================
+def seed_inventory_with_full_coverage(connection):
+    """
+    Inserts coverage items that cover every combination of:
+    - 8 vibes: Ethnic, Modern, Boho, Indo-Western, Classic, Formal, Casual, Streetwear
+    - Colour families: warm, cool, neutral, earth, pastel, jewel
+    - Occasion groups: wedding/festive, professional, social/party, casual
+    Uses INSERT OR IGNORE so safe to run multiple times.
+    """
+    cursor = connection.cursor()
+
+    # Column order matches current_inventory schema:
+    # item_name, category, colour, colour_hex, fabric, silhouette, cut, fit,
+    # vibe, size_available, price, brand_tier, occasion_tags
+    coverage_rows = [
+
+        # ── ETHNIC TOPS — all colour families ──────────────────
+        ("Terracotta hand-embroidered anarkali kurta",
+         "Top","Terracotta","#C67C5A","Cotton","Anarkali","Anarkali","Regular",
+         "Ethnic","XS,S,M,L,XL,XXL",1800,"Mid-range","wedding,mehendi,festive,pooja,navratri"),
+
+        ("Rust silk A-line kurta with mirror work",
+         "Top","Rust","#B7410E","Silk","A-Line","A-Line","Regular",
+         "Ethnic","XS,S,M,L,XL,XXL",2200,"Mid-range","sangeet,diwali,navratri,festive,eid"),
+
+        ("Deep red Banarasi silk kurta",
+         "Top","Deep Red","#8B0000","Silk","Straight","Straight","Regular",
+         "Ethnic","XS,S,M,L,XL",3200,"Mid-range","wedding,pooja,festive,reception,diwali"),
+
+        ("Cobalt blue Chanderi silk kurta with zari border",
+         "Top","Cobalt Blue","#0047AB","Chanderi Silk","Straight","Straight","Regular",
+         "Ethnic","XS,S,M,L,XL,XXL",1600,"Mid-range","wedding,sangeet,festive,eid,diwali"),
+
+        ("Emerald green velvet anarkali top",
+         "Top","Emerald Green","#046307","Velvet","Anarkali","Anarkali","Regular",
+         "Ethnic","XS,S,M,L,XL",2800,"Mid-range","wedding,sangeet,festive,reception"),
+
+        ("Lavender georgette kurta with thread embroidery",
+         "Top","Lavender","#B57EDC","Georgette","A-Line","A-Line","Regular",
+         "Ethnic","XS,S,M,L,XL,XXL",1400,"Mid-range","mehendi,haldi,festive,casual,pooja"),
+
+        ("Blush pink silk kurta with pintuck detail",
+         "Top","Blush Pink","#FFB6C1","Silk-Cotton","Straight","Straight","Regular",
+         "Ethnic","S,M,L,XL",1300,"Mid-range","mehendi,haldi,pooja,festive,sangeet"),
+
+        ("Powder blue mul-cotton chikankari kurta",
+         "Top","Powder Blue","#B0C4DE","Mul-Cotton","Straight","Straight","Regular",
+         "Ethnic","XS,S,M,L,XL,XXL",990,"Budget","casual,pooja,mehendi,festive"),
+
+        ("Ivory silk straight kurta with gold zari",
+         "Top","Ivory","#FFFFF0","Silk","Straight","Straight","Regular",
+         "Ethnic","XS,S,M,L,XL",2400,"Mid-range","wedding,pooja,festive,formal,reception"),
+
+        ("Beige linen kurta with minimal embroidery",
+         "Top","Beige","#F5F0E8","Linen","Straight","Straight","Regular",
+         "Ethnic","S,M,L,XL",1100,"Mid-range","office,casual,pooja,mehendi"),
+
+        # ── MODERN TOPS — all colour families ──────────────────
+        ("Royal blue crepe wrap dress",
+         "Dress","Royal Blue","#2471A3","Crepe","Wrap","Wrap Dress","Fitted",
+         "Modern","XS,S,M,L,XL,XXL",1800,"Mid-range","office,client_meeting,birthday_party,date_night"),
+
+        ("Steel blue linen relaxed shirt",
+         "Top","Steel Blue","#4682B4","Linen","Relaxed","Shirt","Regular",
+         "Modern","XS,S,M,L,XL",1200,"Mid-range","office,brunch,casual,networking_event"),
+
+        ("Burnt orange shift dress in crepe",
+         "Dress","Burnt Orange","#CC5500","Crepe","Shift","Shift Dress","Regular",
+         "Modern","XS,S,M,L,XL",1700,"Mid-range","brunch,birthday_party,girls_night_out,casual"),
+
+        ("Coral linen co-ord top",
+         "Top","Coral","#FF6B6B","Linen","Relaxed","Top","Relaxed",
+         "Modern","XS,S,M,L,XL",1400,"Mid-range","brunch,shopping_trip,casual,travel"),
+
+        ("Mustard yellow structured blazer dress",
+         "Dress","Mustard Yellow","#FFDB58","Polyester-Blend","Blazer-Dress","Blazer Dress","Regular",
+         "Modern","XS,S,M,L,XL",2600,"Mid-range","office,conference,networking_event,formal_dinner"),
+
+        ("White cotton poplin relaxed shirt",
+         "Top","White","#FFFFFF","Cotton","Relaxed","Shirt","Regular",
+         "Modern","XS,S,M,L,XL,XXL",700,"Budget","office,job_interview,casual,brunch"),
+
+        ("Black fitted rib-knit top",
+         "Top","Black","#1A1A1A","Rib-Knit","Fitted","Top","Fitted",
+         "Modern","XS,S,M,L,XL",900,"Budget","office,date_night,party,casual,birthday_party"),
+
+        ("Sage green cotton maxi dress with smocking",
+         "Dress","Sage Green","#B2AC88","Cotton","Maxi","Maxi Dress","Relaxed",
+         "Boho","XS,S,M,L,XL,XXL",1600,"Mid-range","brunch,shopping_trip,travel,casual,date_night"),
+
+        ("Dusty rose tiered ruffle midi dress",
+         "Dress","Dusty Rose","#C9A898","Rayon","Tiered","Tiered Dress","Relaxed",
+         "Boho","XS,S,M,L,XL",1800,"Mid-range","date_night,brunch,birthday_party,casual,girls_night_out"),
+
+        ("Olive green linen co-ord top",
+         "Top","Olive Green","#556B2F","Linen","Relaxed","Top","Relaxed",
+         "Boho","XS,S,M,L,XL,XXL",1400,"Mid-range","travel,shopping_trip,casual,brunch,sunday_outing"),
+
+        # ── FORMAL OUTERWEAR ───────────────────────────────────
+        ("Navy blue structured blazer",
+         "Outerwear","Navy","#000080","Stretch Wool","Structured","Blazer","Slim",
+         "Formal","XS,S,M,L,XL",2500,"Mid-range","office,job_interview,conference,formal_dinner,networking_event"),
+
+        ("Charcoal grey tailored blazer",
+         "Outerwear","Charcoal","#36454F","Wool-Blend","Structured","Blazer","Tailored",
+         "Formal","XS,S,M,L,XL",2800,"Mid-range","job_interview,conference,client_meeting,black_tie,office"),
+
+        ("Ivory single-button linen blazer",
+         "Outerwear","Ivory","#FFFFF0","Linen","Structured","Blazer","Regular",
+         "Modern","XS,S,M,L,XL",2200,"Mid-range","office,networking_event,brunch,conference"),
+
+        ("Olive green denim jacket oversized",
+         "Outerwear","Olive Green","#556B2F","Denim","Oversized","Jacket","Oversized",
+         "Casual","XS,S,M,L,XL,XXL",2000,"Mid-range","shopping_trip,travel,casual,brunch,college"),
+
+        # ── BOTTOMS — broad coverage ───────────────────────────
+        ("Cream linen wide-leg trousers",
+         "Bottom","Cream","#F5F0E8","Linen","Wide-Leg","Trousers","Relaxed",
+         "Modern","XS,S,M,L,XL,XXL",1400,"Mid-range","office,brunch,casual,travel"),
+
+        ("Camel cotton-blend straight trousers",
+         "Bottom","Camel","#C19A6B","Cotton-Blend","Straight","Trousers","Regular",
+         "Classic","XS,S,M,L,XL",1600,"Mid-range","office,client_meeting,brunch,casual"),
+
+        ("Brown faux-suede midi skirt",
+         "Bottom","Brown","#8B4513","Faux Suede","Midi A-Line","Skirt","Regular",
+         "Modern","XS,S,M,L,XL",1900,"Mid-range","date_night,brunch,shopping_trip,casual"),
+
+        ("Terracotta A-line midi skirt",
+         "Bottom","Terracotta","#C67C5A","Cotton","A-Line","Skirt","Regular",
+         "Boho","XS,S,M,L,XL,XXL",1100,"Mid-range","brunch,shopping_trip,casual,date_night,sunday_outing"),
+
+        ("Cobalt blue flared palazzo",
+         "Bottom","Cobalt Blue","#0047AB","Georgette","Flared","Palazzo","Relaxed",
+         "Ethnic","XS,S,M,L,XL,XXL",950,"Mid-range","festive,sangeet,casual,party,birthday_party"),
+
+        ("White linen straight trousers",
+         "Bottom","White","#FFFFFF","Linen","Straight","Trousers","Regular",
+         "Modern","XS,S,M,L,XL,XXL",1100,"Budget","office,brunch,casual,travel,networking_event"),
+
+        ("Ivory palazzo in chanderi silk",
+         "Bottom","Ivory","#FFFFF0","Chanderi","Wide-Leg","Palazzo","Relaxed",
+         "Ethnic","XS,S,M,L,XL,XXL",900,"Mid-range","wedding,festive,office,formal,reception"),
+
+        # ── FOOTWEAR — all occasions ───────────────────────────
+        ("Gold block-heel sandals",
+         "Footwear","Gold","#D4AF37","Faux Leather","Block Heel","Sandals","Regular",
+         "Ethnic","All Sizes",1400,"Mid-range","wedding,festive,party,date_night,sangeet"),
+
+        ("Nude pointed-toe kitten heels",
+         "Footwear","Nude","#F5DEB3","Faux Leather","Kitten Heel","Heels","Slim",
+         "Modern","All Sizes",1600,"Mid-range","office,job_interview,formal_dinner,networking_event,conference"),
+
+        ("Black block-heel ankle boots",
+         "Footwear","Black","#1A1A1A","Faux Leather","Block Heel","Ankle Boot","Regular",
+         "Classic","All Sizes",2200,"Mid-range","office,date_night,party,casual,birthday_party"),
+
+        ("White chunky sneakers",
+         "Footwear","White","#FFFFFF","Mesh/Rubber","Platform","Sneakers","Regular",
+         "Streetwear","All Sizes",1800,"Mid-range","shopping_trip,brunch,travel,casual,college"),
+
+        ("Silver strappy heeled sandals",
+         "Footwear","Silver","#C0C0C0","Metallic Faux Leather","Stiletto","Heels","Slim",
+         "Modern","All Sizes",1900,"Mid-range","wedding,sangeet,party,formal_dinner,date_night"),
+
+        ("Tan kolhapuri flat chappals",
+         "Footwear","Tan","#D2B48C","Leather","Flat","Chappals","Regular",
+         "Ethnic","All Sizes",800,"Budget","casual,mehendi,pooja,shopping_trip,festive"),
+
+        # ── BAGS — all occasions ───────────────────────────────
+        ("Ivory potli bag with gold embroidery",
+         "Bag","Ivory","#FFFFF0","Silk","Potli","Potli","Regular",
+         "Ethnic","One Size",600,"Mid-range","wedding,festive,party,sangeet,reception"),
+
+        ("Black structured office tote",
+         "Bag","Black","#1A1A1A","Faux Leather","Structured","Tote","Regular",
+         "Modern","One Size",1500,"Mid-range","office,job_interview,conference,casual,client_meeting"),
+
+        ("Tan woven straw tote",
+         "Bag","Tan","#D2B48C","Straw","Tote","Tote","Regular",
+         "Boho","One Size",900,"Mid-range","brunch,shopping_trip,travel,casual,beach"),
+
+        ("Gold metallic evening clutch",
+         "Bag","Gold","#D4AF37","Metallic Faux Leather","Clutch","Clutch","Regular",
+         "Modern","One Size",850,"Mid-range","party,wedding,date_night,festive,formal_dinner"),
+
+        ("Nude mini crossbody bag",
+         "Bag","Nude","#F5DEB3","Faux Leather","Crossbody","Crossbody","Regular",
+         "Modern","One Size",1200,"Mid-range","office,brunch,date_night,shopping_trip,casual"),
+
+        # ── ETHNIC DUPATTAS / OUTERWEAR ────────────────────────
+        ("Ivory organza dupatta with gold border",
+         "Outerwear","Ivory","#FFFFF0","Organza","Dupatta","Dupatta","Free",
+         "Ethnic","Free Size",600,"Mid-range","wedding,festive,formal,pooja,reception"),
+
+        ("Blush pink chiffon dupatta with silver threadwork",
+         "Outerwear","Blush Pink","#FFB6C1","Chiffon","Dupatta","Dupatta","Free",
+         "Ethnic","Free Size",550,"Mid-range","mehendi,sangeet,festive,casual,haldi"),
+
+        ("Cobalt blue georgette dupatta with zari trim",
+         "Outerwear","Cobalt Blue","#0047AB","Georgette","Dupatta","Dupatta","Free",
+         "Ethnic","Free Size",500,"Mid-range","wedding,sangeet,festive,eid,diwali"),
+    ]
+
+    # Use INSERT OR IGNORE so this is safe to run multiple times
+    cursor.executemany("""
+        INSERT OR IGNORE INTO current_inventory
+        (item_name, category, colour, colour_hex, fabric, silhouette,
+         cut, fit, vibe, size_available, price, brand_tier, occasion_tags)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, coverage_rows)
+
+    connection.commit()
+    print(f"  ✅ Coverage items added: {len(coverage_rows)} items covering all colours, vibes, and occasions")
+
+
+
+def seed_indian_ethnic_garments(connection):
+    """
+    UPGRADE 4 — Adds proper Indian garment types to the inventory.
+    These use the correct Indian clothing categories (lehenga, sharara, etc.)
+    instead of generic 'Top' or 'Dress' so ethnic occasion filtering works correctly.
+    Safe to run multiple times — uses INSERT OR IGNORE.
+    """
+    cursor = connection.cursor()
+
+    # Each row: (item_name, category, colour, colour_hex, fabric, silhouette,
+    #            cut, fit, vibe, size_available, price, brand_tier, occasion_tags)
+    indian_items = [
+
+        # ── LEHENGAS ──────────────────────────────────────────────────────────────
+        ("Crimson red silk lehenga set with gold zari embroidery — choli, skirt, net dupatta",
+         "lehenga", "crimson red", "#8B0000", "Silk", "Flared", "Flared Lehenga", "Regular",
+         "Ethnic,Classic", "XS,S,M,L,XL", 8000, "Premium",
+         "wedding,sangeet,festive,diwali,reception"),
+
+        ("Royal blue tissue silk lehenga with silver gota patti — 3-piece set",
+         "lehenga", "royal blue", "#000080", "Tissue Silk", "Flared", "Flared Lehenga", "Regular",
+         "Ethnic,Classic", "XS,S,M,L,XL", 6500, "Premium",
+         "sangeet,wedding,festive,reception"),
+
+        ("Dusty rose organza lehenga with mirror and thread embroidery — 3-piece",
+         "lehenga", "dusty rose", "#FFB6C1", "Organza", "Flared", "Flared Lehenga", "Regular",
+         "Ethnic,Indo-Western", "XS,S,M,L,XL,XXL", 5000, "Mid-range",
+         "mehendi,sangeet,festive,haldi"),
+
+        ("Ivory and gold Banarasi silk lehenga — heavy gold zari weave, bridal quality",
+         "lehenga", "ivory", "#FFFFF0", "Banarasi Silk", "Flared", "Flared Lehenga", "Regular",
+         "Ethnic,Classic", "XS,S,M,L,XL", 12000, "Premium",
+         "wedding,festive,reception"),
+
+        ("Sage green georgette lehenga with resham embroidery — lightweight all-day wear",
+         "lehenga", "sage green", "#B2AC88", "Georgette", "A-Line", "A-Line Lehenga", "Regular",
+         "Ethnic,Indo-Western", "XS,S,M,L,XL,XXL", 4200, "Mid-range",
+         "mehendi,haldi,sangeet,festive"),
+
+        ("Cobalt blue velvet lehenga with kundan and pearl embellishment",
+         "lehenga", "cobalt blue", "#0047AB", "Velvet", "Flared", "Flared Lehenga", "Regular",
+         "Ethnic,Classic", "XS,S,M,L,XL", 7500, "Premium",
+         "wedding,sangeet,festive,diwali"),
+
+        # ── SHARARAS ──────────────────────────────────────────────────────────────
+        ("Terracotta silk sharara set — straight kurta, wide flared sharara, organza dupatta",
+         "sharara", "terracotta", "#C67C5A", "Silk", "Wide-Flared", "Sharara", "Regular",
+         "Ethnic", "XS,S,M,L,XL,XXL", 3800, "Mid-range",
+         "wedding,sangeet,festive,navratri"),
+
+        ("Mint green chiffon sharara with delicate chikankari embroidery",
+         "sharara", "mint green", "#98D8C8", "Chiffon", "Wide-Flared", "Sharara", "Regular",
+         "Ethnic,Indo-Western", "XS,S,M,L,XL,XXL", 2800, "Mid-range",
+         "mehendi,haldi,festive,casual"),
+
+        ("Lavender georgette sharara with gold sequin border and matching dupatta",
+         "sharara", "lavender", "#B57EDC", "Georgette", "Wide-Flared", "Sharara", "Regular",
+         "Ethnic", "XS,S,M,L,XL,XXL", 3200, "Mid-range",
+         "sangeet,mehendi,festive,navratri"),
+
+        ("Deep burgundy raw silk sharara — embroidered kurta with resham thread work",
+         "sharara", "burgundy", "#800020", "Raw Silk", "Wide-Flared", "Sharara", "Regular",
+         "Ethnic,Classic", "XS,S,M,L,XL", 4500, "Mid-range",
+         "wedding,sangeet,diwali,festive"),
+
+        # ── GHARARAS ──────────────────────────────────────────────────────────────
+        ("Pastel pink mul-cotton gharara set with gota embroidery — Lucknowi style",
+         "gharara", "pastel pink", "#FFB6C1", "Mul-Cotton", "Pleated", "Gharara", "Regular",
+         "Ethnic", "XS,S,M,L,XL,XXL", 2200, "Mid-range",
+         "mehendi,haldi,eid,festive,casual"),
+
+        ("Off-white chanderi gharara with blue block print — casual ethnic festive",
+         "gharara", "off-white", "#FFFFF0", "Chanderi", "Pleated", "Gharara", "Regular",
+         "Ethnic,Casual", "XS,S,M,L,XL,XXL", 1800, "Mid-range",
+         "mehendi,pooja,casual,festive"),
+
+        # ── ANARKALIS ──────────────────────────────────────────────────────────────
+        ("Floor-length emerald green Anarkali suit with dupatta — silk georgette",
+         "anarkali", "emerald green", "#046307", "Silk Georgette", "Floor-Length Flared",
+         "Anarkali", "Regular",
+         "Ethnic,Classic,Indo-Western", "XS,S,M,L,XL,XXL", 3500, "Mid-range",
+         "wedding,sangeet,diwali,festive,formal"),
+
+        ("Peacock blue printed Anarkali with contrast palazzo and dupatta",
+         "anarkali", "peacock blue", "#0047AB", "Chiffon", "Knee-Length Flared",
+         "Anarkali", "Regular",
+         "Ethnic,Indo-Western", "XS,S,M,L,XL,XXL", 2400, "Mid-range",
+         "wedding,festive,casual,brunch"),
+
+        ("Rust orange cotton Anarkali with mirror embroidery — daily ethnic wear",
+         "anarkali", "rust orange", "#CC5500", "Cotton", "Knee-Length Flared",
+         "Anarkali", "Regular",
+         "Ethnic,Casual", "XS,S,M,L,XL,XXL", 1400, "Budget",
+         "pooja,casual,college,festive"),
+
+        # ── SAREES ────────────────────────────────────────────────────────────────
+        ("Deep red Kanjeevaram silk saree with gold zari border — classic bridal look",
+         "saree", "deep red", "#8B0000", "Kanjeevaram Silk", "6-Yard Drape",
+         "Draped", "Free Size",
+         "Ethnic,Classic", "free size", 15000, "Premium",
+         "wedding,pooja,festive,formal dinner,reception"),
+
+        ("Teal blue georgette saree with silver border and blouse piece",
+         "saree", "teal blue", "#008080", "Georgette", "6-Yard Drape",
+         "Draped", "Free Size",
+         "Ethnic,Classic,Formal", "free size", 2200, "Mid-range",
+         "office,wedding,festive,formal dinner"),
+
+        # ── INDO-WESTERN SETS ─────────────────────────────────────────────────────
+        ("Navy blue crop top and dhoti skirt set — heavy embroidery, premium indo-western",
+         "dhoti_skirt", "navy blue", "#000080", "Raw Silk", "Dhoti Drape",
+         "Dhoti Skirt", "Regular",
+         "Indo-Western,Modern", "XS,S,M,L,XL", 4800, "Premium",
+         "sangeet,party,date night,festive"),
+
+        ("Ivory cape set — long embroidered cape over straight trousers and crop top",
+         "cape_set", "ivory", "#FFFFF0", "Georgette", "Cape and Trouser",
+         "Cape Set", "Regular",
+         "Indo-Western,Modern,Classic", "XS,S,M,L,XL", 5200, "Premium",
+         "sangeet,wedding guest,formal,party"),
+
+        ("Dusty pink palazzo suit — embroidered kurta, wide palazzo, sheer dupatta",
+         "palazzo_set", "dusty pink", "#FFB6C1", "Chiffon", "Wide-Leg",
+         "Palazzo Set", "Regular",
+         "Ethnic,Indo-Western,Casual", "XS,S,M,L,XL,XXL", 2600, "Mid-range",
+         "casual,mehendi,brunch,festive,pooja"),
+    ]
+
+    cursor.executemany("""
+        INSERT OR IGNORE INTO current_inventory
+        (item_name, category, colour, colour_hex, fabric, silhouette,
+         cut, fit, vibe, size_available, price, brand_tier, occasion_tags)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, indian_items)
+
+    connection.commit()
+    print(f"  ✅ Indian ethnic garments added: {len(indian_items)} items "
+          f"(lehengas, shararas, ghararas, anarkalis, sarees, indo-western sets)")
+
+
+# =============================================================
 # MAIN — runs when you type: python3 database/setup_database.py
 # =============================================================
 if __name__ == "__main__":
@@ -803,6 +1165,8 @@ if __name__ == "__main__":
     # Run all our setup functions in order
     create_all_tables(connection)
     seed_inventory(connection)
+    seed_inventory_with_full_coverage(connection)  # existing: broad coverage items
+    seed_indian_ethnic_garments(connection)         # NEW: proper Indian garment types
     seed_jewellery(connection)
     seed_user_data(connection)
 

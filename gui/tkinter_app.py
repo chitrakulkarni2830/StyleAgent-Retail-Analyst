@@ -1,728 +1,1325 @@
 """
-=============================================================
-gui/tkinter_app.py — Style Agent Gold Standard
-=============================================================
-PURPOSE:
-  The complete Tkinter GUI application. Dark theme (#1A1A2E),
-  gold accents (#C9A84C), Georgia headings, Segoe UI body text.
-
-  6 PANELS:
-    1. LEFT SIDEBAR   — user profile (name, body, undertone, budget, size)
-    2. CENTRE TOP     — occasion dropdown + 8 vibe tiles
-    3. CENTRE MIDDLE  — colour preference grids + harmony radio
-    4. CENTRE BOTTOM  — generate button + progress bar + status
-    5. RIGHT PANEL    — scrollable outfit results (3 cards)
-    6. BOTTOM STRIP   — AI stylist chat (Ollama llama3)
-
-  Generation runs in a background thread so the GUI never freezes.
-=============================================================
+gui/tkinter_app.py — Style Agent Gold Standard v2
+Upgrade 4: White & Gold minimalist redesign.
+Upgrade 3: Single snapping budget slider.
+Upgrade 2: total_budget passed to pipeline.
+Upgrade 1: shopping links displayed in outfit cards.
 """
 
-import tkinter as tk                     # built-in GUI framework
-from tkinter import ttk, scrolledtext   # themed widgets + scrollable text
-import threading                         # for running agents in background
-import json                              # for saving JSON output
-import csv                               # for exporting Tableau CSV
-import os                                # for file paths
-import sys                               # for module path
+import tkinter as tk
+from tkinter import ttk, scrolledtext, colorchooser  # colorchooser is built-in — no install needed
+import threading, json, csv, os, sys, webbrowser
 
-# ── Add project root to sys.path so we can import our modules ─
 GUI_DIR      = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(GUI_DIR)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# ── Try to import Ollama for the AI chat panel ────────────────
 try:
-    import ollama        # pip install ollama
+    import ollama
     OLLAMA_OK = True
 except ImportError:
-    OLLAMA_OK = False    # chat will show a friendly "not installed" message
+    OLLAMA_OK = False
 
-# =============================================================
-# COLOUR PALETTE & FONTS — the entire app uses these constants
-# =============================================================
-BG_DARK      = "#1A1A2E"   # main window background — deep navy
-BG_PANEL     = "#16213E"   # panel backgrounds — slightly lighter navy
-BG_CARD      = "#0F3460"   # card backgrounds — deep indigo
-GOLD         = "#C9A84C"   # accent gold — for headings, selected items
-GOLD_DARK    = "#A07830"   # darker gold — for button hover
-WHITE        = "#FFFFFF"   # primary text
-GREY         = "#A0A0B0"   # secondary text / labels
-GREEN        = "#4CAF50"   # success messages
+# ── Colour palette ────────────────────────────────────────────
+COLOURS = {
+    # Main backgrounds
+    "bg_primary":    "#FFFFFF",   # pure white — main window
+    "bg_secondary":  "#FAFAFA",   # near-white — sidebar
+    "bg_card":       "#FFFFFF",   # card background
+    "bg_input":      "#F7F7F7",   # input field background
+    "chat_bg":       "#F5F3EF",   # warm cream — chat window
+    "darkbg_header": "#0F0F0F",   # near-black — nav bar, card headers
+    # Gold scale
+    "gold_primary":  "#C9A84C",   # warm gold — buttons, accents
+    "gold_light":    "#F5EDD3",   # pale gold — hover backgrounds
+    "gold_shimmer":  "#E8C97A",   # bright gold — shimmer effects
+    "gold_dark":     "#7D5A1E",   # deep gold — headings, pressed
+    # Text
+    "text_primary":  "#111111",   # near-black
+    "text_secondary":"#444444",   # secondary labels
+    "text_muted":    "#999999",   # hints and placeholders
+    # Borders
+    "border_light":  "#EBEBEB",   # card outlines
+    "border_mid":    "#D4D4D4",   # input borders
+    "border_gold":   "#C9A84C",   # selected states
+    # Status
+    "success":       "#2E7D32",
+    "error":         "#C62828",
+    # Vibe tile accent colours
+    "vibe_ethnic":   "#8B1A4A",   # deep magenta
+    "vibe_modern":   "#1A3A5C",   # deep navy
+    "vibe_indowest": "#6B3A2A",   # warm maroon
+    "vibe_classic":  "#2A2A2A",   # near black
+    "vibe_formal":   "#1B3A4B",   # dark teal
+    "vibe_casual":   "#2D5A27",   # forest green
+    "vibe_boho":     "#7A4F2A",   # warm brown
+    "vibe_street":   "#1A1A4A",   # deep indigo
+}
 
-FONT_HEADING = ("Georgia", 13, "bold")         # panel headings
-FONT_SUBHEAD = ("Georgia", 11, "bold")         # card headings
-FONT_BODY    = ("Segoe UI", 10)                # regular text
-FONT_SMALL   = ("Segoe UI", 9)                 # secondary labels
-FONT_BTN     = ("Segoe UI", 11, "bold")        # buttons
+# ── Typography ────────────────────────────────────────────────
+FONTS = {
+    # Keep old keys so existing code still works
+    "heading_large":  ("Georgia", 20, "bold"),
+    "heading_medium": ("Georgia", 15, "bold"),
+    "heading_small":  ("Georgia", 12, "bold"),
+    "body":           ("Segoe UI", 10),
+    "body_bold":      ("Segoe UI", 10, "bold"),
+    "small":          ("Segoe UI", 9),
+    "price":          ("Georgia", 13, "bold"),
+    "link":           ("Segoe UI", 9, "underline"),
+    "mono":           ("Courier New", 9),
+    # New keys for the redesign
+    "app_title":      ("Georgia", 20, "bold"),
+    "section_head":   ("Georgia", 14, "bold"),
+    "card_title":     ("Georgia", 13, "bold"),
+    "small_bold":     ("Segoe UI", 8, "bold"),
+    "btn_primary":    ("Georgia", 11, "bold"),
+    "btn_secondary":  ("Segoe UI", 9, "bold"),
+    "tag":            ("Segoe UI", 8),
+}
 
-# 20 colours for the colour-picker grids (name → HEX)
+# ── Budget snap steps (Upgrade 3) ─────────────────────────────
+BUDGET_STEPS = [
+    500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000,
+    6000, 7000, 8000, 10000, 12000, 15000, 20000, 25000, 30000,
+]
+
+# ── 20-colour picker grid ─────────────────────────────────────
 COLOUR_GRID = [
-    ("Ivory",       "#FFFFF0"), ("White",       "#F5F5F5"),
-    ("Black",       "#1C1C1C"), ("Navy",         "#000080"),
-    ("Cobalt Blue", "#0047AB"), ("Sky Blue",     "#87CEEB"),
-    ("Emerald",     "#046307"), ("Sage Green",   "#B2AC88"),
-    ("Olive",       "#556B2F"), ("Terracotta",   "#C67C5A"),
-    ("Rust",        "#B7410E"), ("Burnt Orange", "#CC5500"),
-    ("Coral",       "#FF6B6B"), ("Peach",        "#FFCBA4"),
-    ("Blush Pink",  "#FFB6C1"), ("Rose",         "#FF007F"),
-    ("Burgundy",    "#800020"), ("Deep Purple",  "#4B0082"),
-    ("Gold",        "#D4AF37"), ("Camel",        "#C19A6B"),
+    ("Ivory","#FFFFF0"), ("White","#F5F5F5"), ("Black","#1C1C1C"),
+    ("Navy","#000080"), ("Cobalt Blue","#0047AB"), ("Sky Blue","#87CEEB"),
+    ("Emerald","#046307"), ("Sage Green","#B2AC88"), ("Olive","#556B2F"),
+    ("Terracotta","#C67C5A"), ("Rust","#B7410E"), ("Burnt Orange","#CC5500"),
+    ("Coral","#FF6B6B"), ("Peach","#FFCBA4"), ("Blush Pink","#FFB6C1"),
+    ("Rose","#FF007F"), ("Burgundy","#800020"), ("Deep Purple","#4B0082"),
+    ("Gold","#D4AF37"), ("Camel","#C19A6B"),
 ]
 
-# 8 vibes with emoji labels
+# ── 8 vibes — (emoji, display_name, colour_key) ──────────────
 VIBES = [
-    ("🪷 Ethnic",       "Ethnic"),
-    ("🌆 Modern",       "Modern"),
-    ("🌸 Indo-Western", "Indo-Western"),
-    ("👑 Classic",      "Classic"),
-    ("💼 Formal",       "Formal"),
-    ("🌿 Casual",       "Casual"),
-    ("🎨 Boho",         "Boho"),
-    ("🛹 Streetwear",   "Streetwear"),
+    ("🪷", "Ethnic",       "vibe_ethnic"),
+    ("🌆", "Modern",       "vibe_modern"),
+    ("🌸", "Indo-Western", "vibe_indowest"),
+    ("👑", "Classic",      "vibe_classic"),
+    ("💼", "Formal",       "vibe_formal"),
+    ("🌿", "Casual",       "vibe_casual"),
+    ("🎨", "Boho",         "vibe_boho"),
+    ("🛹", "Streetwear",   "vibe_street"),
 ]
 
-# 30+ occasions in groups
+# ── 24-swatch fashion colour grid for the favourite picker ────
+FASHION_SWATCHES_24 = [
+    ("#FFFFFF","White"),  ("#FFFFF0","Ivory"),   ("#F5F0E8","Cream"),
+    ("#F5DEB3","Beige"),  ("#C19A6B","Camel"),   ("#1A1A1A","Black"),
+    ("#8B0000","Deep Red"),("#C0392B","Red"),    ("#CC5500","Burnt Org"),
+    ("#FFDB58","Mustard"),("#C67C5A","Terracotta"),("#B7410E","Rust"),
+    ("#000080","Navy"),   ("#0047AB","Cobalt"),  ("#87CEEB","Sky Blue"),
+    ("#046307","Emerald"),("#B2AC88","Sage"),    ("#7D3C98","Purple"),
+    ("#FFB6C1","Blush"),  ("#B57EDC","Lavender"),("#98D8C8","Mint"),
+    ("#FFCBA4","Peach"),  ("#D4AF37","Gold"),    ("#C0C0C0","Silver"),
+]
+
+# ── 35+ occasions ─────────────────────────────────────────────
 OCCASIONS = [
-    # Indian
-    "Wedding Guest", "Sangeet", "Mehendi", "Haldi", "Pooja",
-    "Diwali Party", "Navratri Night", "Eid Celebration", "Durga Puja", "Festival Mela",
-    # Professional
-    "Office / Work", "Client Meeting", "Job Interview", "Conference", "Business Lunch",
-    "Networking Event", "Work From Home (Video Call)",
-    # Social
-    "Brunch with Friends", "Birthday Party (Yours)", "Birthday Party (Guest)",
-    "Date Night", "First Date", "Anniversary Dinner", "Girls Night Out",
-    "House Party", "Farewell Party",
-    # Casual
-    "Shopping Trip", "College / University", "Sunday Outing",
-    "Movie Date", "Travel / Airport", "Lunch Date",
-    # Formal
-    "Black Tie Gala", "Award Ceremony", "Formal Dinner", "Theatre / Opera",
+    "Wedding Guest","Sangeet","Mehendi","Haldi","Pooja",
+    "Diwali Party","Navratri Night","Eid Celebration","Durga Puja","Festival Mela",
+    "Office / Work","Client Meeting","Job Interview","Conference","Business Lunch",
+    "Networking Event","Work From Home (Video Call)",
+    "Brunch with Friends","Birthday Party (Yours)","Birthday Party (Guest)",
+    "Date Night","First Date","Anniversary Dinner","Girls Night Out",
+    "House Party","Farewell Party",
+    "Shopping Trip","College / University","Sunday Outing",
+    "Movie Date","Travel / Airport","Lunch Date",
+    "Black Tie Gala","Award Ceremony","Formal Dinner","Theatre / Opera",
 ]
 
-# Harmony options
-HARMONIES = ["Complementary", "Analogous", "Triadic", "Monochromatic", "Surprise Me"]
+HARMONIES = ["Complementary","Analogous","Triadic","Monochromatic","Surprise Me"]
+
+# ── Occasion label → DB keyword map (fixes "wedding_guest" bug) ──
+OCCASION_MAP = {
+    "Wedding Guest":"wedding", "Sangeet":"sangeet", "Mehendi":"mehendi",
+    "Haldi":"mehendi", "Pooja":"pooja", "Diwali Party":"diwali",
+    "Navratri Night":"navratri", "Eid Celebration":"eid",
+    "Durga Puja":"festival", "Festival Mela":"festival",
+    "Office / Work":"office", "Client Meeting":"client_meeting",
+    "Job Interview":"job_interview", "Conference":"conference",
+    "Business Lunch":"business_lunch", "Networking Event":"networking_event",
+    "Work From Home (Video Call)":"office",
+    "Brunch with Friends":"brunch",
+    "Birthday Party (Yours)":"birthday_party",
+    "Birthday Party (Guest)":"birthday_party",
+    "Date Night":"date_night", "First Date":"date_night",
+    "Anniversary Dinner":"anniversary_dinner",
+    "Girls Night Out":"girls_night_out",
+    "House Party":"birthday_party", "Farewell Party":"birthday_party",
+    "Shopping Trip":"shopping_trip", "College / University":"college",
+    "Sunday Outing":"sunday_outing", "Movie Date":"movie_date",
+    "Travel / Airport":"travel", "Lunch Date":"brunch",
+    "Black Tie Gala":"black_tie", "Award Ceremony":"award_ceremony",
+    "Formal Dinner":"formal_dinner", "Theatre / Opera":"theatre",
+}
+
 
 # =============================================================
-# CLASS: StyleAgentApp — the main application window
+# UPGRADE 1 — ChatGPT-style floating AI stylist dialog
+# =============================================================
+class StyleChatDialog:
+    """
+    A floating popup window styled like ChatGPT.
+    Opens when the user clicks 'Ask Stylist' in the nav bar.
+    Has scrolling chat history, animated typing indicator,
+    and sends messages to Ollama llama3 in a background thread.
+    """
+
+    def __init__(self, parent_root):
+        self.parent = parent_root          # reference to main window for centering
+        self.is_typing = False             # True while AI response is loading
+        self.typing_dots = 0              # animation counter (1-3)
+
+        # Create a separate floating window on top of the main window
+        self.dialog = tk.Toplevel(parent_root)
+        self.dialog.title("\u2746  Your AI Stylist")
+        self.dialog.configure(bg=COLOURS["bg_primary"])
+        self.dialog.resizable(True, True)
+        self.dialog.minsize(420, 500)
+        self.dialog.transient(parent_root)   # stay on top of main window
+        self.dialog.grab_set()               # block interaction with main window
+
+        # Calculate center position on the parent window
+        parent_root.update_idletasks()
+        px, py = parent_root.winfo_x(), parent_root.winfo_y()
+        pw, ph = parent_root.winfo_width(), parent_root.winfo_height()
+        dw, dh = 520, 680
+        x = px + (pw - dw) // 2    # horizontal center
+        y = py + (ph - dh) // 2    # vertical center
+        self.dialog.geometry(f"{dw}x{dh}+{x}+{y}")
+
+        # Build each part of the dialog layout
+        self._build_header()
+        self._build_messages_area()
+        self._build_typing_indicator()
+        self._build_input_bar()
+
+        # Show welcome message immediately when the dialog opens
+        self._add_ai_message(
+            "Hello! \U0001f44b I'm your personal AI stylist. Ask me anything about fashion!\n\n"
+            "\u2022 What should I wear to a Mehendi as a guest?\n"
+            "\u2022 What colours suit warm skin tones?\n"
+            "\u2022 How do I style a saree for an office party?\n"
+            "\u2022 What jewellery goes with a lehenga?"
+        )
+
+    def _build_header(self):
+        """Dark header bar with avatar, title, online indicator, and close button."""
+        hdr = tk.Frame(self.dialog, bg=COLOURS["darkbg_header"], height=64)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)   # prevent frame shrinking to fit children
+
+        # Gold avatar square on the left
+        av = tk.Frame(hdr, bg=COLOURS["gold_primary"], width=36, height=36)
+        av.pack(side="left", padx=(16, 10), pady=14)
+        av.pack_propagate(False)
+        tk.Label(av, text="\u2746", font=("Georgia", 14, "bold"),
+                 fg=COLOURS["bg_primary"], bg=COLOURS["gold_primary"]).pack(expand=True)
+
+        # Title and online status
+        tb = tk.Frame(hdr, bg=COLOURS["darkbg_header"])
+        tb.pack(side="left", expand=True, fill="x")
+        tk.Label(tb, text="Style Agent", font=("Georgia", 13, "bold"),
+                 fg=COLOURS["gold_primary"], bg=COLOURS["darkbg_header"]).pack(anchor="w")
+        tk.Label(tb, text="\u25cf Online  \u2014  AI Fashion Stylist", font=("Segoe UI", 9),
+                 fg="#4CAF50", bg=COLOURS["darkbg_header"]).pack(anchor="w")
+
+        # Close button on the right
+        tk.Button(hdr, text="\u2715", font=("Segoe UI", 11),
+                  bg=COLOURS["darkbg_header"], fg=COLOURS["text_muted"],
+                  relief="flat", bd=0, cursor="hand2",
+                  activebackground=COLOURS["error"],
+                  activeforeground=COLOURS["bg_primary"],
+                  command=self.dialog.destroy).pack(side="right", padx=16, pady=20)
+
+        # Thin gold rule under header
+        tk.Frame(self.dialog, bg=COLOURS["gold_primary"], height=1).pack(fill="x")
+
+    def _build_messages_area(self):
+        """Scrollable canvas that holds all message bubbles."""
+        self.msg_outer = tk.Frame(self.dialog, bg=COLOURS["chat_bg"])
+        self.msg_outer.pack(fill="both", expand=True)
+
+        # Canvas enables smooth scrolling
+        self.msg_canvas = tk.Canvas(self.msg_outer, bg=COLOURS["chat_bg"],
+                                    highlightthickness=0, bd=0)
+        sb = ttk.Scrollbar(self.msg_outer, orient="vertical",
+                           command=self.msg_canvas.yview)
+        self.msg_canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        self.msg_canvas.pack(side="left", fill="both", expand=True)
+
+        # Inner frame holds the actual message bubble widgets
+        self.msg_frame = tk.Frame(self.msg_canvas, bg=COLOURS["chat_bg"])
+        self.msg_canvas.create_window((0, 0), window=self.msg_frame,
+                                      anchor="nw", width=490)
+
+        # Update scroll region whenever new messages are added
+        self.msg_frame.bind("<Configure>", lambda e: self.msg_canvas.configure(
+            scrollregion=self.msg_canvas.bbox("all")))
+
+        # Mouse wheel scrolling
+        for w in [self.msg_canvas, self.msg_frame]:
+            w.bind("<MouseWheel>", lambda e: self.msg_canvas.yview_scroll(
+                int(-1 * (e.delta / 120)), "units"))
+
+    def _build_typing_indicator(self):
+        """Animated '...' row shown while AI is generating a response."""
+        self.typing_frame = tk.Frame(self.dialog, bg=COLOURS["chat_bg"], height=32)
+        self.typing_frame.pack(fill="x", padx=16, pady=2)
+        # Label starts hidden — shown only when AI is processing
+        self.typing_label = tk.Label(self.typing_frame,
+                                     text="\u2746  Style Agent is thinking...",
+                                     font=("Segoe UI", 9, "italic"),
+                                     fg=COLOURS["gold_primary"], bg=COLOURS["chat_bg"])
+
+    def _show_typing(self):
+        """Show the typing indicator and start animating it."""
+        self.is_typing = True
+        self.typing_label.pack(side="left", pady=4)
+        self._animate_typing()
+
+    def _hide_typing(self):
+        """Hide the typing indicator and stop the animation."""
+        self.is_typing = False
+        self.typing_label.pack_forget()
+
+    def _animate_typing(self):
+        """Cycles through 1-3 dots every 400ms to show 'thinking' animation."""
+        if not self.is_typing:
+            return   # stop animating if hidden
+        self.typing_dots = (self.typing_dots % 3) + 1
+        filled = "\u25cf" * self.typing_dots + "\u25cb" * (3 - self.typing_dots)
+        self.typing_label.config(text=f"\u2746  Style Agent is thinking  {filled}")
+        self.dialog.after(400, self._animate_typing)   # schedule next frame
+
+    def _build_input_bar(self):
+        """Fixed input bar at the bottom with text box and send button."""
+        tk.Frame(self.dialog, bg=COLOURS["border_light"], height=1).pack(fill="x")
+        bar = tk.Frame(self.dialog, bg=COLOURS["bg_primary"], pady=12)
+        bar.pack(fill="x", side="bottom", padx=16)
+
+        # Bordered container for the text entry
+        ctr = tk.Frame(bar, bg=COLOURS["bg_input"], highlightthickness=1,
+                       highlightbackground=COLOURS["border_light"],
+                       highlightcolor=COLOURS["gold_primary"])
+        ctr.pack(fill="x", side="left", expand=True, padx=(0, 8))
+
+        # Multi-line text widget (2 rows tall)
+        self.input_box = tk.Text(ctr, font=("Segoe UI", 10),
+                                 bg=COLOURS["bg_input"], fg=COLOURS["text_primary"],
+                                 relief="flat", bd=0, height=2, wrap="word",
+                                 insertbackground=COLOURS["gold_primary"],
+                                 highlightthickness=0)
+        self.input_box.pack(fill="x", padx=10, pady=8)
+
+        # Placeholder text — shown when field is empty
+        self.ph = "Ask your stylist anything..."
+        self.input_box.insert("1.0", self.ph)
+        self.input_box.config(fg=COLOURS["text_muted"])
+        self.input_box.bind("<FocusIn>",  self._clear_ph)
+        self.input_box.bind("<FocusOut>", self._restore_ph)
+        self.input_box.bind("<Return>",       self._on_enter)
+        self.input_box.bind("<Shift-Return>", lambda e: None)  # shift+enter = newline
+
+        # Gold send button
+        tk.Button(bar, text="\u27a4", font=("Segoe UI", 14, "bold"),
+                  bg=COLOURS["gold_primary"], fg=COLOURS["bg_primary"],
+                  relief="flat", bd=0, width=3, height=1, cursor="hand2",
+                  activebackground=COLOURS["gold_dark"],
+                  command=self._send).pack(side="right", ipady=8)
+
+    def _clear_ph(self, e):
+        """Clear placeholder text when user clicks into the input field."""
+        if self.input_box.get("1.0", "end").strip() == self.ph:
+            self.input_box.delete("1.0", "end")
+            self.input_box.config(fg=COLOURS["text_primary"])
+
+    def _restore_ph(self, e):
+        """Restore placeholder text if user leaves the field empty."""
+        if not self.input_box.get("1.0", "end").strip():
+            self.input_box.insert("1.0", self.ph)
+            self.input_box.config(fg=COLOURS["text_muted"])
+
+    def _on_enter(self, e):
+        """Send on Enter key press (without Shift)."""
+        self._send()
+        return "break"   # prevent Enter from adding a newline
+
+    def _send(self):
+        """Read input, add user bubble, show typing indicator, call AI in thread."""
+        text = self.input_box.get("1.0", "end").strip()
+        if not text or text == self.ph:
+            return
+        self.input_box.delete("1.0", "end")
+        self._add_user_message(text)
+        self._show_typing()
+        threading.Thread(target=self._get_response, args=(text,), daemon=True).start()
+
+    def _get_response(self, user_text):
+        """Call Ollama in background thread so UI stays responsive."""
+        import subprocess
+        sys_p = (
+            "You are an expert AI fashion stylist specialising in Indian and Western fashion. "
+            "You know Indian ethnic wear: sarees, lehengas, anarkalis, shararas, salwar suits. "
+            "Give warm, specific, practical advice with jewellery and accessories."
+        )
+        try:
+            r = subprocess.run(
+                ["ollama", "run", "llama3"],
+                input=f"{sys_p}\n\nUser: {user_text}\n\nStylist:",
+                capture_output=True, text=True, timeout=60)
+            resp = r.stdout.strip() or "I couldn't generate a response. Is Ollama running?"
+        except subprocess.TimeoutExpired:
+            resp = "Response took too long. Try a shorter question!"
+        except FileNotFoundError:
+            resp = "Ollama not found. Run 'ollama serve' in your terminal, then try again."
+        except Exception as ex:
+            resp = f"Error: {ex}"
+        self.dialog.after(0, lambda: self._on_response(resp))
+
+    def _on_response(self, text):
+        """Called on main thread after AI responds — hide typing, show bubble."""
+        self._hide_typing()
+        self._add_ai_message(text)
+
+    def _add_user_message(self, text):
+        """Right-aligned gold bubble — user's message."""
+        row = tk.Frame(self.msg_frame, bg=COLOURS["chat_bg"])
+        row.pack(fill="x", padx=12, pady=4)
+        tk.Frame(row, bg=COLOURS["chat_bg"]).pack(side="left", expand=True)  # left spacer
+        tk.Label(row, text=text, font=("Segoe UI", 10),
+                 bg=COLOURS["gold_primary"], fg=COLOURS["bg_primary"],
+                 wraplength=320, justify="left", padx=14, pady=10).pack(side="right")
+        self.dialog.after(50, lambda: self.msg_canvas.yview_moveto(1.0))  # scroll down
+
+    def _add_ai_message(self, text):
+        """Left-aligned white card with gold avatar — AI's message."""
+        row = tk.Frame(self.msg_frame, bg=COLOURS["chat_bg"])
+        row.pack(fill="x", padx=12, pady=4, anchor="w")
+        # Small gold avatar
+        tk.Label(row, text="\u2746", font=("Georgia", 10, "bold"),
+                 bg=COLOURS["gold_primary"], fg=COLOURS["bg_primary"],
+                 width=2, height=1, padx=4, pady=4).pack(side="left", anchor="n", pady=2)
+        # White card with thin border
+        outer = tk.Frame(row, bg=COLOURS["border_light"], padx=1, pady=1)
+        outer.pack(side="left", padx=(6, 50))
+        tk.Label(outer, text=text, font=("Segoe UI", 10),
+                 bg=COLOURS["bg_card"], fg=COLOURS["text_primary"],
+                 wraplength=340, justify="left", padx=14, pady=10).pack()
+        self.dialog.after(50, lambda: self.msg_canvas.yview_moveto(1.0))  # scroll down
+
+
+# =============================================================
+# CLASS: StyleAgentApp
 # =============================================================
 class StyleAgentApp:
-    """
-    The main Tkinter application. Call StyleAgentApp().run() to launch.
-    All widgets are built in the __init__ method and helper methods.
-    """
 
     def __init__(self):
-        """Create the main window, set theme, and build all 6 panels."""
-
-        # ── Create the root window ────────────────────────────
+        # Main window
         self.root = tk.Tk()
-        self.root.title("✨ Style Agent — Hyper-Personalised AI Fashion Stylist")
-        self.root.configure(bg=BG_DARK)
-        self.root.geometry("1400x900")   # 1400 wide × 900 tall
-        self.root.minsize(1100, 700)     # minimum usable size
+        self.root.title("Style Agent")
+        self.root.geometry("1400x900")
+        self.root.configure(bg=COLOURS["bg_primary"])
+        self.root.resizable(True, True)
+        self.root.minsize(1200, 750)
 
-        # ── State variables ───────────────────────────────────
-        self.selected_vibe         = tk.StringVar(value="Ethnic")   # chosen vibe
-        self.selected_occasion     = tk.StringVar(value="Wedding Guest")
-        self.selected_size         = tk.StringVar(value="M")
-        self.selected_undertone    = tk.StringVar(value="warm")
-        self.selected_body         = tk.StringVar(value="Hourglass")
-        self.selected_harmony      = tk.StringVar(value="Surprise Me")
-        self.budget_min_var        = tk.DoubleVar(value=3000)
-        self.budget_max_var        = tk.DoubleVar(value=20000)
-        self.name_var              = tk.StringVar(value="")
+        # State variables
+        self.selected_vibe      = tk.StringVar(value="Ethnic")
+        self.selected_occasion  = tk.StringVar(value="Wedding Guest")
+        self.selected_size      = tk.StringVar(value="M")
+        self.selected_undertone = tk.StringVar(value="warm")
+        self.selected_body      = tk.StringVar(value="Hourglass")
+        self.selected_harmony   = tk.StringVar(value="Surprise Me")
+        self.selected_budget    = tk.IntVar(value=3000)   # single total budget (Upgrade 3)
+        self.name_var           = tk.StringVar(value="")
+        self.fav_colours        = set()
+        self.avoid_colours      = set()
+        self.vibe_tiles         = {}
+        self.fav_tiles          = {}
+        self.avoid_tiles        = {}
+        self.outfit_results     = []
+        self.status_var         = tk.StringVar(value="Ready — fill in your details and click Generate")
 
-        # Colour selections — sets of HEX codes
-        self.fav_colours   = set()   # user's favourite colours
-        self.avoid_colours = set()   # colours to avoid
-
-        # Tile widget references (so we can highlight selected ones)
-        self.vibe_tiles       = {}       # label → (display, value)
-        self.fav_tiles        = {}       # hex → Label widget
-        self.avoid_tiles      = {}       # hex → Label widget
-        self.outfit_results   = []       # list of result dicts from agent pipeline
-        self.status_var       = tk.StringVar(value="Ready — fill in your details and click Generate")
-
-        # ── Configure ttk style for dark theme ────────────────
         self._setup_style()
-
-        # ── Build the overall layout ──────────────────────────
         self._build_layout()
 
-    # ─────────────────────────────────────────────────────────
-    # _setup_style: configure ttk widgets for dark theme
-    # ─────────────────────────────────────────────────────────
+    # ── ttk style configuration ───────────────────────────────
     def _setup_style(self):
-        """Applies the dark gold theme to all ttk widgets."""
         style = ttk.Style(self.root)
-        style.theme_use("clam")   # 'clam' is most customisable
-
-        # Dark backgrounds for all ttk widgets
-        style.configure("TFrame",       background=BG_DARK)
-        style.configure("TLabel",       background=BG_DARK, foreground=WHITE, font=FONT_BODY)
-        style.configure("TCombobox",    fieldbackground=BG_PANEL, background=BG_PANEL,
-                        foreground=WHITE, font=FONT_BODY)
-        style.configure("TRadiobutton", background=BG_DARK, foreground=WHITE, font=FONT_BODY,
-                        indicatoron=True)
-        style.configure("TScale",       background=BG_DARK, troughcolor=BG_PANEL)
-        style.configure("Gold.TProgressbar", troughcolor=BG_PANEL,
-                        background=GOLD, thickness=12)
-
-        # Map combobox selection highlight to gold
+        style.theme_use("clam")
+        C = COLOURS
+        style.configure("TFrame",       background=C["bg_primary"])
+        style.configure("TLabel",       background=C["bg_primary"], foreground=C["text_primary"])
+        style.configure("TCombobox",    fieldbackground=C["bg_input"], background=C["bg_input"],
+                        foreground=C["text_primary"], font=FONTS["body"])
+        style.configure("TRadiobutton", background=C["bg_secondary"], foreground=C["text_primary"])
+        style.configure("TScale",       background=C["bg_secondary"], troughcolor=C["border_light"])
+        style.configure("Gold.TProgressbar", troughcolor=C["border_light"],
+                        background=C["gold_primary"], thickness=8)
+        try:
+            style.layout("Horizontal.Gold.TProgressbar",
+                         style.layout("Horizontal.TProgressbar"))
+        except Exception:
+            pass
         style.map("TCombobox",
-                  selectbackground=[("readonly", BG_PANEL)],
-                  selectforeground=[("readonly", GOLD)])
+                  selectbackground=[("readonly", C["bg_input"])],
+                  selectforeground=[("readonly", C["gold_dark"])])
 
-    # ─────────────────────────────────────────────────────────
-    # _lbl: helper to make a gold heading label
-    # ─────────────────────────────────────────────────────────
-    def _lbl(self, parent, text, font=FONT_HEADING, fg=GOLD, **kwargs):
-        """Returns a configured Label widget — shortcuts repeated styling."""
-        return tk.Label(parent, text=text, font=font, fg=fg, bg=BG_DARK, **kwargs)
-
-    # ─────────────────────────────────────────────────────────
-    # _panel: helper to make a styled panel Frame
-    # ─────────────────────────────────────────────────────────
-    def _panel(self, parent, **kwargs):
-        """Returns a dark-theme Frame for use as a panel."""
-        return tk.Frame(parent, bg=BG_PANEL, relief="flat", bd=0, **kwargs)
-
-    # ─────────────────────────────────────────────────────────
-    # _build_layout: create the 3-column overall layout
-    # ─────────────────────────────────────────────────────────
+    # ── Master 3-column layout ────────────────────────────────
     def _build_layout(self):
-        """
-        Builds the master layout:
-          LEFT COLUMN (250px)   — Panel 1: User Profile Sidebar
-          CENTRE COLUMN (flex)  — Panels 2, 3, 4: Occasion + Colours + Generate
-          RIGHT COLUMN (400px)  — Panel 5: Outfit Results
-          BOTTOM STRIP (full)   — Panel 6: AI Chat
-        """
-        # ── Top portion: 3 columns side by side ────────────────
-        self.top_frame = tk.Frame(self.root, bg=BG_DARK)
-        self.top_frame.pack(fill="both", expand=True, padx=6, pady=6)
+        """Dark nav bar at top, then 3-column body below."""
 
-        # Left column — fixed width 240px
-        self.left_col = tk.Frame(self.top_frame, bg=BG_DARK, width=240)
-        self.left_col.pack(side="left", fill="y", padx=(0, 4))
-        self.left_col.pack_propagate(False)   # prevent shrinking
+        # ── TOP NAV BAR ─────────────────────────────────
+        # Full-width dark bar with logo, tagline, and chat button
+        nav = tk.Frame(self.root, bg=COLOURS["darkbg_header"], height=52)
+        nav.pack(fill="x", side="top")
+        nav.pack_propagate(False)   # keep it exactly 52px tall
 
-        # Centre column — expands to fill space
-        self.centre_col = tk.Frame(self.top_frame, bg=BG_DARK)
-        self.centre_col.pack(side="left", fill="both", expand=True, padx=(0, 4))
+        # Logo text on the left
+        tk.Label(nav, text="❆  Style Agent",
+                 font=("Georgia", 16, "bold"), fg=COLOURS["gold_primary"],
+                 bg=COLOURS["darkbg_header"], padx=24
+                 ).pack(side="left", pady=12)
 
-        # Right column — fixed 420px
-        self.right_col = tk.Frame(self.top_frame, bg=BG_DARK, width=420)
+        # Tagline next to logo
+        tk.Label(nav, text="Your Personal AI Fashion Stylist",
+                 font=("Segoe UI", 9), fg=COLOURS["text_muted"],
+                 bg=COLOURS["darkbg_header"]).pack(side="left", pady=12)
+
+        # 'Ask Stylist' button on the right — opens the ChatGPT-style dialog
+        chat_btn = tk.Button(
+            nav, text="💬  Ask Stylist",
+            font=FONTS["btn_secondary"],
+            bg=COLOURS["gold_primary"], fg=COLOURS["darkbg_header"],
+            relief="flat", bd=0, padx=16, pady=6, cursor="hand2",
+            activebackground=COLOURS["gold_dark"],
+            activeforeground=COLOURS["bg_primary"],
+            command=lambda: StyleChatDialog(self.root)   # open floating dialog
+        )
+        chat_btn.pack(side="right", padx=20, pady=10)
+        chat_btn.bind("<Enter>", lambda e: chat_btn.config(
+            bg=COLOURS["gold_dark"], fg=COLOURS["bg_primary"]))
+        chat_btn.bind("<Leave>", lambda e: chat_btn.config(
+            bg=COLOURS["gold_primary"], fg=COLOURS["darkbg_header"]))
+
+        # Gold accent line under the nav bar
+        tk.Frame(self.root, bg=COLOURS["gold_primary"], height=2).pack(fill="x")
+
+        # ── 3-COLUMN BODY ─────────────────────────────────
+        top = tk.Frame(self.root, bg=COLOURS["bg_primary"])
+        top.pack(fill="both", expand=True)
+
+        # Left sidebar — 260px fixed
+        self.left_col = tk.Frame(top, bg=COLOURS["bg_secondary"], width=260)
+        self.left_col.pack(side="left", fill="y")
+        self.left_col.pack_propagate(False)
+
+        # Light vertical separator
+        tk.Frame(top, bg=COLOURS["border_light"], width=1).pack(side="left", fill="y")
+
+        # Centre — expands to fill remaining space
+        self.centre_col = tk.Frame(top, bg=COLOURS["bg_primary"])
+        self.centre_col.pack(side="left", fill="both", expand=True)
+
+        # Light vertical separator
+        tk.Frame(top, bg=COLOURS["border_light"], width=1).pack(side="left", fill="y")
+
+        # Right results panel — 460px fixed
+        self.right_col = tk.Frame(top, bg=COLOURS["bg_secondary"], width=460)
         self.right_col.pack(side="left", fill="y")
         self.right_col.pack_propagate(False)
 
-        # ── Bottom: AI Chat strip (full width) ─────────────────
-        self.bottom_frame = tk.Frame(self.root, bg=BG_DARK)
-        self.bottom_frame.pack(fill="x", padx=6, pady=(0, 6))
+        self._build_left_sidebar(self.left_col)
+        self._build_centre_column(self.centre_col)
+        self._build_right_column(self.right_col)
 
-        # ── Build each panel ───────────────────────────────────
-        self._build_panel1_profile(self.left_col)
-        self._build_panel2_occasion(self.centre_col)
-        self._build_panel3_colours(self.centre_col)
-        self._build_panel4_generate(self.centre_col)
-        self._build_panel5_results(self.right_col)
-        self._build_panel6_chat(self.bottom_frame)
+    # ── Small helper: gold divider line ───────────────────────
+    def _divider(self, parent, colour=None, padx=16):
+        tk.Frame(parent, bg=colour or COLOURS["gold_primary"], height=1).pack(
+            fill="x", padx=padx, pady=4)
 
     # =========================================================
-    # PANEL 1 — USER PROFILE SIDEBAR
+    # LEFT SIDEBAR — PROFILE
     # =========================================================
-    def _build_panel1_profile(self, parent):
-        """Left panel: name, body type, skin undertone, budget, size."""
-        panel = self._panel(parent)
-        panel.pack(fill="both", expand=True, padx=4, pady=4)
+    def _build_left_sidebar(self, parent):
+        # App logo
+        tk.Label(parent, text="✦  Style Agent",
+                 font=FONTS["heading_large"], fg=COLOURS["gold_dark"],
+                 bg=COLOURS["bg_secondary"]).pack(pady=(18,2), padx=16)
+        self._divider(parent)
 
-        # ── Heading ───────────────────────────────────────────
-        self._lbl(panel, "👤  My Profile", bg=BG_PANEL).pack(pady=(10, 6))
-        ttk.Separator(panel, orient="horizontal").pack(fill="x", padx=10, pady=4)
+        # Scrollable interior so fields don't get clipped on small screens
+        canvas = tk.Canvas(parent, bg=COLOURS["bg_secondary"], highlightthickness=0)
+        sb     = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(canvas, bg=COLOURS["bg_secondary"])
+        win   = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(
+            scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
 
-        inner = tk.Frame(panel, bg=BG_PANEL)
-        inner.pack(fill="both", expand=True, padx=10)
+        # Shared entry style
+        ES = dict(font=FONTS["body"], bg=COLOURS["bg_input"],
+                  fg=COLOURS["text_primary"], relief="flat", bd=4,
+                  highlightthickness=1, highlightbackground=COLOURS["border_light"],
+                  highlightcolor=COLOURS["gold_primary"])
 
-        # Name field
-        tk.Label(inner, text="Your Name", font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w", pady=(6,2))
-        name_entry = tk.Entry(inner, textvariable=self.name_var, font=FONT_BODY,
-                              bg=BG_CARD, fg=WHITE, insertbackground=WHITE,
-                              relief="flat", bd=4)
-        name_entry.pack(fill="x", pady=(0, 8))
+        def slbl(text):
+            """Small section label above each input."""
+            tk.Label(inner, text=text, font=FONTS["small"],
+                     fg=COLOURS["text_secondary"],
+                     bg=COLOURS["bg_secondary"]).pack(anchor="w", padx=16, pady=(10,2))
+
+        # Name
+        slbl("YOUR NAME")
+        tk.Entry(inner, textvariable=self.name_var,
+                 insertbackground=COLOURS["gold_primary"],
+                 **ES).pack(fill="x", padx=16, pady=(0,4))
 
         # Body type
-        tk.Label(inner, text="Body Type", font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w", pady=(0,2))
-        body_combo = ttk.Combobox(inner, textvariable=self.selected_body, state="readonly",
-                                  values=["Hourglass","Pear","Apple","Rectangle","Petite","Plus Size"],
-                                  font=FONT_BODY)
-        body_combo.pack(fill="x", pady=(0, 8))
+        slbl("BODY TYPE")
+        ttk.Combobox(inner, textvariable=self.selected_body, state="readonly",
+                     values=["Hourglass","Pear","Apple","Rectangle","Petite","Plus Size"],
+                     font=FONTS["body"]).pack(fill="x", padx=16, pady=(0,4))
 
-        # Skin undertone with coloured swatches
-        tk.Label(inner, text="Skin Undertone", font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w", pady=(0,2))
-        undertone_frame = tk.Frame(inner, bg=BG_PANEL)
-        undertone_frame.pack(fill="x", pady=(0, 8))
-
-        undertone_defs = [
-            ("Warm",    "warm",    "#D2936A"),   # warm peachy swatch
-            ("Cool",    "cool",    "#B0C4DE"),   # cool blue swatch
-            ("Neutral", "neutral", "#C9B99A"),   # neutral beige swatch
-        ]
-        for label_text, value, swatch_hex in undertone_defs:
-            row = tk.Frame(undertone_frame, bg=BG_PANEL)
+        # Skin undertone
+        slbl("SKIN UNDERTONE")
+        ut_frame = tk.Frame(inner, bg=COLOURS["bg_secondary"])
+        ut_frame.pack(fill="x", padx=16, pady=(0,4))
+        for lbl, val, swatch in [("Warm","warm","#D2936A"),
+                                  ("Cool","cool","#B0C4DE"),
+                                  ("Neutral","neutral","#C9B99A")]:
+            row = tk.Frame(ut_frame, bg=COLOURS["bg_secondary"])
             row.pack(fill="x", pady=1)
-            # Coloured swatch square
-            tk.Label(row, text="  ", bg=swatch_hex, width=2).pack(side="left", padx=(0,4))
-            tk.Radiobutton(row, text=label_text, variable=self.selected_undertone,
-                           value=value, font=FONT_BODY, fg=WHITE, bg=BG_PANEL,
-                           selectcolor=BG_DARK, activebackground=BG_PANEL,
-                           activeforeground=GOLD).pack(side="left")
+            tk.Label(row, text="  ", bg=swatch, width=2).pack(side="left", padx=(0,6))
+            tk.Radiobutton(row, text=lbl, variable=self.selected_undertone, value=val,
+                           font=FONTS["body"], fg=COLOURS["text_primary"],
+                           bg=COLOURS["bg_secondary"], selectcolor=COLOURS["gold_light"],
+                           activebackground=COLOURS["bg_secondary"]).pack(side="left")
 
-        # Budget sliders
-        tk.Label(inner, text="Budget Range (₹)", font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w", pady=(0,2))
-
-        # Min budget slider
-        min_row = tk.Frame(inner, bg=BG_PANEL)
-        min_row.pack(fill="x")
-        tk.Label(min_row, text="Min:", font=FONT_SMALL, fg=GREY, bg=BG_PANEL, width=4).pack(side="left")
-        self.min_lbl = tk.Label(min_row, text="₹3,000", font=FONT_SMALL, fg=GOLD, bg=BG_PANEL, width=8)
-        self.min_lbl.pack(side="right")
-
-        min_scale = ttk.Scale(inner, from_=500, to=50000, variable=self.budget_min_var,
-                              orient="horizontal",
-                              command=lambda v: self.min_lbl.config(text=f"₹{int(float(v)):,}"))
-        min_scale.pack(fill="x", pady=(0, 4))
-
-        # Max budget slider
-        max_row = tk.Frame(inner, bg=BG_PANEL)
-        max_row.pack(fill="x")
-        tk.Label(max_row, text="Max:", font=FONT_SMALL, fg=GREY, bg=BG_PANEL, width=4).pack(side="left")
-        self.max_lbl = tk.Label(max_row, text="₹20,000", font=FONT_SMALL, fg=GOLD, bg=BG_PANEL, width=8)
-        self.max_lbl.pack(side="right")
-
-        max_scale = ttk.Scale(inner, from_=500, to=100000, variable=self.budget_max_var,
-                              orient="horizontal",
-                              command=lambda v: self.max_lbl.config(text=f"₹{int(float(v)):,}"))
-        max_scale.pack(fill="x", pady=(0, 8))
-
-        # Size selector (radio buttons)
-        tk.Label(inner, text="Size", font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w", pady=(0,2))
-        size_frame = tk.Frame(inner, bg=BG_PANEL)
-        size_frame.pack(fill="x", pady=(0, 8))
-
+        # Size
+        slbl("SIZE")
+        sz_frame = tk.Frame(inner, bg=COLOURS["bg_secondary"])
+        sz_frame.pack(fill="x", padx=16, pady=(0,4))
         for i, sz in enumerate(["XS","S","M","L","XL","XXL"]):
-            tk.Radiobutton(size_frame, text=sz, variable=self.selected_size, value=sz,
-                           font=FONT_SMALL, fg=WHITE, bg=BG_PANEL,
-                           selectcolor=GOLD, activebackground=BG_PANEL,
-                           activeforeground=GOLD).grid(row=i//3, column=i%3, padx=2, pady=1, sticky="w")
+            tk.Radiobutton(sz_frame, text=sz, variable=self.selected_size, value=sz,
+                           font=FONTS["small"], fg=COLOURS["text_primary"],
+                           bg=COLOURS["bg_secondary"], selectcolor=COLOURS["gold_primary"],
+                           activebackground=COLOURS["bg_secondary"]
+                           ).grid(row=i//3, column=i%3, padx=2, pady=2, sticky="w")
+
+        # ── Budget Slider — snaps to round steps (Upgrade 3) ──
+        slbl("TOTAL OUTFIT BUDGET")
+        budget_label_var = tk.StringVar(value="₹3,000")
+        tk.Label(inner, textvariable=budget_label_var, font=FONTS["price"],
+                 fg=COLOURS["gold_primary"],
+                 bg=COLOURS["bg_secondary"]).pack(anchor="w", padx=16)
+
+        def on_slider_move(event=None):
+            # Find the nearest allowed step and snap to it
+            raw     = budget_slider.get()
+            nearest = min(BUDGET_STEPS, key=lambda s: abs(s - raw))
+            self.selected_budget.set(nearest)
+            budget_label_var.set(f"₹{nearest:,}")
+
+        budget_slider = ttk.Scale(inner, from_=BUDGET_STEPS[0], to=BUDGET_STEPS[-1],
+                                  orient="horizontal", variable=self.selected_budget,
+                                  command=on_slider_move, length=180)
+        budget_slider.pack(fill="x", padx=16, pady=(0,2))
+        tk.Label(inner, text="Total for the complete outfit (all pieces combined)",
+                 font=FONTS["small"], fg=COLOURS["text_muted"],
+                 bg=COLOURS["bg_secondary"], wraplength=180,
+                 justify="left").pack(padx=16, anchor="w", pady=(0,10))
 
     # =========================================================
-    # PANEL 2 — OCCASION & VIBE
+    # CENTRE COLUMN — 3 stacked panels
     # =========================================================
-    def _build_panel2_occasion(self, parent):
-        """Centre-top: occasion dropdown + 8 vibe tiles in 4x2 grid."""
-        panel = self._panel(parent)
-        panel.pack(fill="x", padx=4, pady=(4, 2))
+    def _build_centre_column(self, parent):
+        self._build_panel_occasion(parent)
+        self._build_panel_colours(parent)
+        self._build_panel_generate(parent)
 
-        self._lbl(panel, "🎯  Occasion & Vibe", bg=BG_PANEL).pack(pady=(8, 4))
-        ttk.Separator(panel, orient="horizontal").pack(fill="x", padx=10, pady=2)
+    def _pframe(self, parent, pady=(6,2)):
+        """Returns a white panel frame with small padding."""
+        f = tk.Frame(parent, bg=COLOURS["bg_primary"])
+        f.pack(fill="x", padx=8, pady=pady)
+        return f
 
-        inner = tk.Frame(panel, bg=BG_PANEL)
-        inner.pack(fill="x", padx=10, pady=6)
+    def _panel_heading(self, parent, text):
+        """Panel heading with gold underline."""
+        tk.Label(parent, text=text, font=FONTS["heading_small"],
+                 fg=COLOURS["gold_dark"],
+                 bg=COLOURS["bg_primary"]).pack(anchor="w", padx=8, pady=(2,4))
+        tk.Frame(parent, bg=COLOURS["gold_primary"], height=1).pack(
+            fill="x", padx=8, pady=(0,4))
 
-        # Occasion dropdown (left side)
-        occ_frame = tk.Frame(inner, bg=BG_PANEL)
-        occ_frame.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        tk.Label(occ_frame, text="Occasion", font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w")
-        occ_box = ttk.Combobox(occ_frame, textvariable=self.selected_occasion,
-                               values=OCCASIONS, state="readonly", font=FONT_BODY, width=28)
-        occ_box.pack(fill="x", pady=(2, 0))
+    # ── Panel: Occasion & Vibe ────────────────────────────────
+    def _build_panel_occasion(self, parent):
+        panel = self._pframe(parent, pady=(8,4))
+        self._panel_heading(panel, "🎯  Occasion & Vibe")
 
-        # Vibe tiles (right side) — 4x2 grid of clickable Labels
-        vibe_frame = tk.Frame(inner, bg=BG_PANEL)
-        vibe_frame.pack(side="left")
-        tk.Label(inner, text="Vibe", font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(side="top", anchor="w")
+        inner = tk.Frame(panel, bg=COLOURS["bg_primary"])
+        inner.pack(fill="x", padx=8, pady=4)
 
-        for idx, (emoji_label, vibe_val) in enumerate(VIBES):
-            tile = tk.Label(vibe_frame, text=emoji_label, font=FONT_SMALL,
-                            fg=WHITE, bg=BG_CARD, relief="flat",
-                            padx=8, pady=4, cursor="hand2", width=14)
-            tile.grid(row=idx//4, column=idx%4, padx=2, pady=2)
-            # Store reference and bind click
-            self.vibe_tiles[vibe_val] = tile
-            tile.bind("<Button-1>", lambda e, v=vibe_val: self._select_vibe(v))
+        # Left: occasion dropdown
+        occ_f = tk.Frame(inner, bg=COLOURS["bg_primary"])
+        occ_f.pack(side="left", fill="x", expand=True, padx=(0,12))
+        tk.Label(occ_f, text="OCCASION", font=FONTS["small"],
+                 fg=COLOURS["text_secondary"],
+                 bg=COLOURS["bg_primary"]).pack(anchor="w")
+        ttk.Combobox(occ_f, textvariable=self.selected_occasion,
+                     values=OCCASIONS, state="readonly",
+                     font=FONTS["body"], width=26).pack(fill="x", pady=(2,0))
 
-        # Highlight the default vibe
-        self._select_vibe("Ethnic")
+        # Right: vibe tiles grid — each tile has an emoji + name + vibe accent colour
+        vibe_o = tk.Frame(inner, bg=COLOURS["bg_primary"])
+        vibe_o.pack(side="left")
+        tk.Label(vibe_o, text="VIBE", font=FONTS["small"],
+                 fg=COLOURS["text_secondary"],
+                 bg=COLOURS["bg_primary"]).pack(anchor="w")
+        vibe_grid = tk.Frame(vibe_o, bg=COLOURS["bg_primary"])
+        vibe_grid.pack()
 
-    def _select_vibe(self, vibe_value):
-        """Highlights the selected vibe tile in gold, resets others."""
-        self.selected_vibe.set(vibe_value)
-        for val, tile in self.vibe_tiles.items():
-            if val == vibe_value:
-                tile.config(bg=GOLD, fg=BG_DARK, relief="solid")   # selected = gold
+        # vibe_tiles now stores (tile_frame, name_label, emoji_label, accent_colour)
+        for idx, (emoji, vibe_name, colour_key) in enumerate(VIBES):
+            # Outer frame acts as the tile — has a highlight border for selection
+            tile = tk.Frame(vibe_grid, bg=COLOURS["bg_primary"],
+                            highlightthickness=2,
+                            highlightbackground=COLOURS["border_light"],
+                            cursor="hand2", width=110, height=72)
+            tile.grid(row=idx//4, column=idx%4, padx=3, pady=3)
+            tile.pack_propagate(False)    # keep fixed size
+
+            # Emoji label inside the tile
+            el = tk.Label(tile, text=emoji, font=("Segoe UI", 18),
+                          bg=COLOURS["bg_primary"], fg=COLOURS["text_secondary"])
+            el.pack(pady=(8,2))
+
+            # Vibe name label below emoji
+            nl = tk.Label(tile, text=vibe_name, font=FONTS["small"],
+                          bg=COLOURS["bg_primary"], fg=COLOURS["text_secondary"])
+            nl.pack()
+
+            # Store tile refs with the accent colour for this vibe
+            accent = COLOURS[colour_key]
+            self.vibe_tiles[vibe_name] = (tile, nl, el, accent)
+
+            # Clicking the tile or its labels all call _select_vibe
+            for w in [tile, el, nl]:
+                w.bind("<Button-1>", lambda e, v=vibe_name: self._select_vibe(v))
+
+        self._select_vibe("Ethnic")   # default selection
+
+    def _select_vibe(self, val):
+        """Highlight the selected vibe tile with its accent colour; grey out others."""
+        self.selected_vibe.set(val)
+        for vname, (tile, nl, el, accent) in self.vibe_tiles.items():
+            if vname == val:
+                # Selected: fill with vibe accent colour, white text
+                tile.config(bg=accent, highlightbackground=accent)
+                el.config(bg=accent, fg=COLOURS["bg_primary"])
+                nl.config(bg=accent, fg=COLOURS["bg_primary"])
             else:
-                tile.config(bg=BG_CARD, fg=WHITE, relief="flat")    # unselected = dark
+                # Deselected: white background, light border
+                tile.config(bg=COLOURS["bg_primary"],
+                            highlightbackground=COLOURS["border_light"])
+                el.config(bg=COLOURS["bg_primary"], fg=COLOURS["text_secondary"])
+                nl.config(bg=COLOURS["bg_primary"], fg=COLOURS["text_secondary"])
 
-    # =========================================================
-    # PANEL 3 — COLOUR PREFERENCES
-    # =========================================================
-    def _build_panel3_colours(self, parent):
-        """Centre-middle: two 5x4 colour grids + harmony radio buttons."""
-        panel = self._panel(parent)
-        panel.pack(fill="x", padx=4, pady=2)
+    # ── Panel: Colour Preferences ─────────────────────────────
+    # ── Panel: Colour Preferences (Fix 2 — full hex picker) ─────────
+    def _build_panel_colours(self, parent):
+        """
+        Builds the colour preferences panel with:
+        Part A: 24-colour curated swatch grid (quick pick)
+        Part B: 'Pick Any Colour' button — opens OS colour wheel
+        Part C: Manual hex entry field + Add button
+        Part D: Selected colours strip showing all chosen colours
+        Part E: 'AVOID THESE' swatch grid (same swatches, separate list)
+        Part F: Colour Harmony radio buttons
+        """
+        panel = self._pframe(parent, pady=(2,4))
+        self._panel_heading(panel, "🎨  Colour Preferences")
 
-        self._lbl(panel, "🎨  Colour Preferences", bg=BG_PANEL).pack(pady=(8, 4))
-        ttk.Separator(panel, orient="horizontal").pack(fill="x", padx=10, pady=2)
+        outer = tk.Frame(panel, bg=COLOURS["bg_primary"])
+        outer.pack(fill="x", padx=8, pady=4)
 
-        inner = tk.Frame(panel, bg=BG_PANEL)
-        inner.pack(fill="x", padx=10, pady=6)
+        # ── LEFT: Favourite colours ─────────────────────────────
+        fav_sec = tk.Frame(outer, bg=COLOURS["bg_primary"])
+        fav_sec.pack(side="left", anchor="n", padx=(0,14))
 
-        # ── Favourite Colours grid ────────────────────────────
-        fav_section = tk.Frame(inner, bg=BG_PANEL)
-        fav_section.pack(side="left", padx=(0, 16))
-        tk.Label(fav_section, text="Favourite Colours (click to select)",
-                 font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w")
-        fav_grid = tk.Frame(fav_section, bg=BG_PANEL)
-        fav_grid.pack()
+        tk.Label(fav_sec, text="FAVOURITE COLOURS", font=FONTS["small"],
+                 fg=COLOURS["text_secondary"],
+                 bg=COLOURS["bg_primary"]).pack(anchor="w")
 
-        for idx, (name, hex_code) in enumerate(COLOUR_GRID):
-            tile = tk.Label(fav_grid, bg=hex_code, width=3, height=1,
-                            relief="flat", cursor="hand2")
-            tile.grid(row=idx//5, column=idx%5, padx=2, pady=2)
-            # Show colour name as tooltip on hover
-            tile.bind("<Enter>", lambda e, n=name: self.status_var.set(f"Colour: {n}"))
+        # 24-colour curated fashion swatch grid (6 columns x 4 rows)
+        FASHION_SWATCHES = [
+            ("White",    "#FFFFFF"), ("Ivory",   "#FFFFF0"),
+            ("Cream",    "#F5F0E8"), ("Beige",   "#F5DEB3"),
+            ("Camel",    "#C19A6B"), ("Black",   "#1A1A1A"),
+            ("Deep Red", "#8B0000"), ("Red",     "#C0392B"),
+            ("Burnt Org","#CC5500"), ("Mustard", "#FFDB58"),
+            ("Terracotta","#C67C5A"),("Rust",    "#B7410E"),
+            ("Navy",     "#000080"), ("Cobalt",  "#0047AB"),
+            ("Sky Blue", "#87CEEB"), ("Emerald", "#046307"),
+            ("Sage",     "#B2AC88"), ("Purple",  "#7D3C98"),
+            ("Blush",    "#FFB6C1"), ("Lavender","#B57EDC"),
+            ("Mint",     "#98D8C8"), ("Peach",   "#FFCBA4"),
+            ("Gold",     "#D4AF37"), ("Silver",  "#C0C0C0"),
+        ]   # 24 swatches covering all major Indian fashion colour families
+
+        swatch_grid = tk.Frame(fav_sec, bg=COLOURS["bg_primary"])
+        swatch_grid.pack(pady=(2,4))
+
+        # Store outer-frame refs so we can update borders on select/deselect
+        fav_swatch_outers = {}   # hex_code → outer border frame
+
+        def on_fav_swatch(hx, outer_frame):
+            """Toggle a curated swatch on/off for favourite colours."""
+            if hx in self.fav_colours:
+                self.fav_colours.discard(hx)              # deselect
+                outer_frame.config(bg=COLOURS["border_light"])  # reset border
+            else:
+                self.fav_colours.add(hx)                  # select
+                outer_frame.config(bg=COLOURS["gold_primary"])  # gold border
+            _update_selected_strip()                       # refresh strip below
+
+        for idx, (name, hx) in enumerate(FASHION_SWATCHES):
+            # Each swatch is a coloured label inside a thin outer frame (acts as border)
+            outer_f = tk.Frame(swatch_grid, bg=COLOURS["border_light"], padx=1, pady=1)
+            outer_f.grid(row=idx//6, column=idx%6, padx=2, pady=2)
+            swatch = tk.Label(outer_f, bg=hx, width=3, height=1, cursor="hand2")
+            swatch.pack()
+            swatch.bind("<Enter>", lambda e, n=name: self.status_var.set(f"Colour: {n}"))
+            swatch.bind("<Leave>", lambda e: self.status_var.set(""))
+            swatch.bind("<Button-1>", lambda e, h=hx, o=outer_f: on_fav_swatch(h, o))
+            fav_swatch_outers[hx] = outer_f
+
+        # ── Hex colour picker row ─────────────────────────────
+        tk.Frame(fav_sec, bg=COLOURS["border_light"], height=1).pack(fill="x", pady=4)
+        picker_row = tk.Frame(fav_sec, bg=COLOURS["bg_primary"])
+        picker_row.pack(anchor="w", pady=2)
+
+        # Colour preview square (shows last custom colour)
+        custom_preview = tk.Label(picker_row, bg=COLOURS["bg_input"],
+                                  width=2, height=1, relief="flat",
+                                  highlightthickness=1,
+                                  highlightbackground=COLOURS["border_light"])
+        custom_preview.pack(side="left", padx=(0,4))
+
+        hex_var = tk.StringVar(value="#C9A84C")  # default to gold
+        hex_entry = tk.Entry(picker_row, textvariable=hex_var, font=FONTS["mono"],
+                             width=9, bg=COLOURS["bg_input"], fg=COLOURS["text_primary"],
+                             relief="flat", bd=0, highlightthickness=1,
+                             highlightbackground=COLOURS["border_light"],
+                             highlightcolor=COLOURS["gold_primary"],
+                             insertbackground=COLOURS["gold_primary"])
+        hex_entry.pack(side="left", padx=(0,4))
+
+        def add_custom_hex(event=None):
+            """Validates and adds the hex code currently in the entry field."""
+            raw = hex_var.get().strip()
+            if not raw.startswith("#"):
+                raw = "#" + raw           # add # if user forgot it
+            valid = set("0123456789abcdefABCDEF")
+            if len(raw) == 7 and all(c in valid for c in raw[1:]):
+                hx = raw.upper()          # normalise to uppercase
+                self.fav_colours.add(hx) # add to favourites
+                custom_preview.config(bg=raw)     # update preview swatch
+                _update_selected_strip()           # refresh strip
+            else:
+                # Flash red border to signal bad input
+                hex_entry.config(highlightbackground=COLOURS["error"])
+                hex_entry.after(1500, lambda:
+                    hex_entry.config(highlightbackground=COLOURS["border_light"]))
+
+        hex_entry.bind("<Return>", add_custom_hex)  # Enter key adds the hex
+
+        add_btn = tk.Button(picker_row, text="Add", font=FONTS["small"],
+                            bg=COLOURS["gold_primary"], fg=COLOURS["bg_primary"],
+                            relief="flat", padx=6, pady=3, cursor="hand2",
+                            command=add_custom_hex)
+        add_btn.pack(side="left", padx=(0,4))
+
+        def open_colour_picker():
+            """
+            Opens the operating system colour picker dialog (built into tkinter).
+            Returns (#rrggbb, (r,g,b)) or (None, None) if user cancels.
+            """
+            start = self.fav_colours and list(self.fav_colours)[-1] or COLOURS["gold_primary"]
+            result = colorchooser.askcolor(title="Pick Your Colour", color=start)
+            if result[1] is not None:          # user picked a colour and did not cancel
+                chosen_hex = result[1].upper() # e.g. "#FF6B35"
+                hex_var.set(chosen_hex)        # update entry field
+                custom_preview.config(bg=result[1])  # update preview square
+                self.fav_colours.add(chosen_hex)     # add to favourites
+                _update_selected_strip()              # refresh strip
+
+        pick_btn = tk.Button(picker_row, text="🎨 Pick", font=FONTS["small"],
+                             bg=COLOURS["bg_input"], fg=COLOURS["text_primary"],
+                             relief="flat", padx=8, pady=3, cursor="hand2",
+                             highlightthickness=1,
+                             highlightbackground=COLOURS["border_light"],
+                             command=open_colour_picker)
+        pick_btn.pack(side="left")
+        pick_btn.bind("<Enter>", lambda e: pick_btn.config(
+            bg=COLOURS["gold_light"], highlightbackground=COLOURS["gold_primary"]))
+        pick_btn.bind("<Leave>", lambda e: pick_btn.config(
+            bg=COLOURS["bg_input"], highlightbackground=COLOURS["border_light"]))
+
+        # ── Selected colours strip ──────────────────────────────
+        # Shows all selected colours as a horizontal row of small squares
+        strip_frame = tk.Frame(fav_sec, bg=COLOURS["bg_primary"])
+        strip_frame.pack(anchor="w", pady=(4,0))
+
+        def _update_selected_strip():
+            """Redraws the selected colours strip whenever a colour is added or removed."""
+            for w in strip_frame.winfo_children():
+                w.destroy()   # clear old content
+            if not self.fav_colours:
+                tk.Label(strip_frame, text="No colours selected",
+                         font=FONTS["small"], fg=COLOURS["text_muted"],
+                         bg=COLOURS["bg_primary"]).pack(side="left")
+                return
+            for hx in sorted(self.fav_colours):
+                cell = tk.Frame(strip_frame, bg=COLOURS["bg_primary"])
+                cell.pack(side="left", padx=2)
+                # Small colour square
+                tk.Label(cell, bg=hx, width=2, height=1,
+                         highlightthickness=2,
+                         highlightbackground=COLOURS["gold_primary"]).pack()
+                # Hex code below in tiny monospace
+                tk.Label(cell, text=hx, font=("Courier New",7),
+                         fg=COLOURS["text_muted"],
+                         bg=COLOURS["bg_primary"]).pack()
+
+        _update_selected_strip()   # initial draw (empty state)
+
+        def clear_all():
+            """Clears all selected favourite colours and resets all swatch borders."""
+            self.fav_colours.clear()
+            for o in fav_swatch_outers.values():
+                o.config(bg=COLOURS["border_light"])  # reset all borders to grey
+            _update_selected_strip()                   # redraw strip with empty state
+
+        tk.Button(fav_sec, text="✕ Clear All", font=FONTS["small"],
+                  bg=COLOURS["bg_primary"], fg=COLOURS["text_muted"],
+                  relief="flat", bd=0, cursor="hand2",
+                  command=clear_all).pack(anchor="w", pady=(2,4))
+
+        # ── MIDDLE: Avoid these colours ────────────────────────
+        avoid_sec = tk.Frame(outer, bg=COLOURS["bg_primary"])
+        avoid_sec.pack(side="left", anchor="n", padx=(0,14))
+
+        tk.Label(avoid_sec, text="AVOID THESE", font=FONTS["small"],
+                 fg=COLOURS["text_secondary"],
+                 bg=COLOURS["bg_primary"]).pack(anchor="w")
+        avoid_grid = tk.Frame(avoid_sec, bg=COLOURS["bg_primary"])
+        avoid_grid.pack(pady=(2,0))
+
+        for idx, (name, hx) in enumerate(COLOUR_GRID):
+            # Reuse the existing COLOUR_GRID constant (20 colours) for the avoid section
+            tile = tk.Label(avoid_grid, bg=hx, width=3, height=1, relief="flat",
+                            cursor="hand2", highlightthickness=1,
+                            highlightbackground=COLOURS["border_light"])
+            tile.grid(row=idx//4, column=idx%4, padx=2, pady=2)
+            tile.bind("<Enter>", lambda e, n=name: self.status_var.set(f"Avoid: {n}"))
             tile.bind("<Leave>", lambda e: self.status_var.set(""))
-            tile.bind("<Button-1>", lambda e, h=hex_code, t=tile: self._toggle_fav(h, t))
-            self.fav_tiles[hex_code] = tile
+            tile.bind("<Button-1>", lambda e, h=hx, t=tile: self._toggle_avoid(h, t))
+            self.avoid_tiles[hx] = tile
 
-        # ── Avoid Colours grid ────────────────────────────────
-        avoid_section = tk.Frame(inner, bg=BG_PANEL)
-        avoid_section.pack(side="left", padx=(0, 16))
-        tk.Label(avoid_section, text="Avoid These Colours",
-                 font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w")
-        avoid_grid = tk.Frame(avoid_section, bg=BG_PANEL)
-        avoid_grid.pack()
-
-        for idx, (name, hex_code) in enumerate(COLOUR_GRID):
-            tile = tk.Label(avoid_grid, bg=hex_code, width=3, height=1,
-                            relief="flat", cursor="hand2")
-            tile.grid(row=idx//5, column=idx%5, padx=2, pady=2)
-            tile.bind("<Button-1>", lambda e, h=hex_code, t=tile: self._toggle_avoid(h, t))
-            self.avoid_tiles[hex_code] = tile
-
-        # ── Colour Harmony radio buttons ──────────────────────
-        harm_section = tk.Frame(inner, bg=BG_PANEL)
-        harm_section.pack(side="left")
-        tk.Label(harm_section, text="Colour Harmony",
-                 font=FONT_SMALL, fg=GREY, bg=BG_PANEL).pack(anchor="w")
+        # ── RIGHT: Colour Harmony radio buttons ────────────────
+        harm = tk.Frame(outer, bg=COLOURS["bg_primary"])
+        harm.pack(side="left", anchor="n")
+        tk.Label(harm, text="COLOUR HARMONY", font=FONTS["small"],
+                 fg=COLOURS["text_secondary"],
+                 bg=COLOURS["bg_primary"]).pack(anchor="w")
         for h in HARMONIES:
-            tk.Radiobutton(harm_section, text=h, variable=self.selected_harmony,
-                           value=h, font=FONT_SMALL, fg=WHITE, bg=BG_PANEL,
-                           selectcolor=GOLD, activebackground=BG_PANEL).pack(anchor="w", pady=1)
+            tk.Radiobutton(harm, text=h, variable=self.selected_harmony, value=h,
+                           font=FONTS["small"], fg=COLOURS["text_primary"],
+                           bg=COLOURS["bg_primary"], selectcolor=COLOURS["gold_primary"],
+                           activebackground=COLOURS["bg_primary"]).pack(anchor="w", pady=1)
 
-    def _toggle_fav(self, hex_code, tile):
-        """Toggle a colour in/out of the favourites selection."""
-        if hex_code in self.fav_colours:
-            self.fav_colours.discard(hex_code)
-            tile.config(highlightthickness=0, relief="flat")      # deselect
+    def _toggle_fav(self, hx, tile):
+        """Kept for backward compat — curated swatch toggle is now inline in _build_panel_colours."""
+        if hx in self.fav_colours:
+            self.fav_colours.discard(hx)
+            tile.config(highlightthickness=1, highlightbackground=COLOURS["border_light"])
         else:
-            self.fav_colours.add(hex_code)
-            tile.config(highlightthickness=2, highlightbackground=GOLD, relief="solid")  # select
+            self.fav_colours.add(hx)
+            tile.config(highlightthickness=3, highlightbackground=COLOURS["gold_primary"])
 
-    def _toggle_avoid(self, hex_code, tile):
-        """Toggle a colour in/out of the avoid selection."""
-        if hex_code in self.avoid_colours:
-            self.avoid_colours.discard(hex_code)
-            tile.config(highlightthickness=0, relief="flat")
+    def _toggle_avoid(self, hx, tile):
+        """Toggles a colour in the avoid list. Called by the avoid swatch grid."""
+        if hx in self.avoid_colours:
+            self.avoid_colours.discard(hx)
+            tile.config(highlightthickness=1, highlightbackground=COLOURS["border_light"])
         else:
-            self.avoid_colours.add(hex_code)
-            tile.config(highlightthickness=2, highlightbackground="#FF4444", relief="solid")
+            self.avoid_colours.add(hx)
+            tile.config(highlightthickness=3, highlightbackground=COLOURS["error"])
+
+    # ── Panel: Generate Button ────────────────────────────────
+    def _build_panel_generate(self, parent):
+        panel = self._pframe(parent, pady=(4,8))
+        inner = tk.Frame(panel, bg=COLOURS["bg_primary"])
+        inner.pack(fill="x", padx=8, pady=8)
+
+        self.gen_btn = tk.Button(inner, text="✦  Generate My Outfits",
+                                 font=("Georgia", 13, "bold"),
+                                 bg=COLOURS["darkbg_header"],   # near-black — matches nav bar
+                                 fg=COLOURS["gold_primary"],    # gold text
+                                 activebackground=COLOURS["gold_primary"],   # gold on press
+                                 activeforeground=COLOURS["darkbg_header"],  # dark text on press
+                                 relief="flat", padx=28, pady=12,
+                                 cursor="hand2", command=self._on_generate)
+        self.gen_btn.pack(pady=(0,8))
+        # Hover: flip to gold background + dark text
+        self.gen_btn.bind("<Enter>", lambda e: self.gen_btn.config(
+            bg=COLOURS["gold_primary"], fg=COLOURS["darkbg_header"]))
+        self.gen_btn.bind("<Leave>", lambda e: self.gen_btn.config(
+            bg=COLOURS["darkbg_header"], fg=COLOURS["gold_primary"]))
+
+        self.progress = ttk.Progressbar(inner, orient="horizontal",
+                                        mode="indeterminate",
+                                        style="Gold.TProgressbar", length=400)
+        self.progress.pack(fill="x", pady=(0,4))
+
+        tk.Label(inner, textvariable=self.status_var, font=FONTS["small"],
+                 fg=COLOURS["text_secondary"],
+                 bg=COLOURS["bg_primary"], wraplength=400).pack()
 
     # =========================================================
-    # PANEL 4 — GENERATE BUTTON
+    # RIGHT COLUMN — Results (top) + Chat (bottom)
     # =========================================================
-    def _build_panel4_generate(self, parent):
-        """Centre-bottom: large gold Generate button + progress bar + status."""
-        panel = self._panel(parent)
-        panel.pack(fill="x", padx=4, pady=2)
+    def _build_right_column(self, parent):
+        """Dark header bar at top, then scrollable outfit results below."""
+        # Dark header bar — matches nav bar style
+        hdr = tk.Frame(parent, bg=COLOURS["darkbg_header"], height=48)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text="  👗  Your Curated Looks",
+                 font=("Georgia", 12, "bold"), fg=COLOURS["gold_primary"],
+                 bg=COLOURS["darkbg_header"], pady=10).pack(side="left")
+        tk.Frame(parent, bg=COLOURS["gold_primary"], height=2).pack(fill="x")
+        self._build_results_area(parent)
 
-        inner = tk.Frame(panel, bg=BG_PANEL)
-        inner.pack(fill="x", padx=15, pady=10)
+    # ── Results: scrollable outfit cards ─────────────────────
+    def _build_results_area(self, parent):
+        tk.Label(parent, text="👗  Your Looks", font=FONTS["heading_small"],
+                 fg=COLOURS["gold_dark"],
+                 bg=COLOURS["bg_primary"]).pack(anchor="w", padx=12, pady=(10,4))
+        tk.Frame(parent, bg=COLOURS["gold_primary"], height=1).pack(fill="x", padx=12)
 
-        # The big generate button
-        self.gen_btn = tk.Button(
-            inner,
-            text="✨  Generate My Outfits",
-            font=("Segoe UI", 14, "bold"),
-            bg=GOLD, fg=BG_DARK,
-            relief="flat", padx=20, pady=10,
-            cursor="hand2",
-            command=self._on_generate,
-            activebackground=GOLD_DARK,
-            activeforeground=BG_DARK,
-        )
-        self.gen_btn.pack(pady=(0, 8))
+        self.results_canvas = tk.Canvas(parent, bg=COLOURS["bg_primary"],
+                                        highlightthickness=0)
+        sb = ttk.Scrollbar(parent, orient="vertical", command=self.results_canvas.yview)
+        self.results_canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        self.results_canvas.pack(side="left", fill="both", expand=True)
 
-        # Progress bar (animated during generation)
-        self.progress = ttk.Progressbar(
-            inner, orient="horizontal", mode="indeterminate",
-            style="Gold.TProgressbar", length=400
-        )
-        self.progress.pack(fill="x", pady=(0, 4))
+        self.results_inner = tk.Frame(self.results_canvas, bg=COLOURS["bg_primary"])
+        self.results_win   = self.results_canvas.create_window(
+            (0, 0), window=self.results_inner, anchor="nw")
+        self.results_inner.bind(
+            "<Configure>",
+            lambda e: self.results_canvas.configure(
+                scrollregion=self.results_canvas.bbox("all")))
+        self.results_canvas.bind(
+            "<Configure>",
+            lambda e: self.results_canvas.itemconfig(self.results_win, width=e.width))
+        self.results_canvas.bind_all(
+            "<MouseWheel>",
+            lambda e: self.results_canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
 
-        # Status label — updates live as each agent runs
-        status_lbl = tk.Label(inner, textvariable=self.status_var,
-                              font=FONT_SMALL, fg=GREY, bg=BG_PANEL, wraplength=400)
-        status_lbl.pack()
+        tk.Label(self.results_inner,
+                 text="Your outfit recommendations\nwill appear here.",
+                 font=FONTS["body"], fg=COLOURS["text_muted"],
+                 bg=COLOURS["bg_primary"], justify="center").pack(pady=30)
 
+    # ── Chat: AI stylist at bottom of right column ────────────
+    def _build_chat_area(self, parent):
+        chat_outer = tk.Frame(parent, bg=COLOURS["bg_primary"])
+        chat_outer.pack(fill="x", side="bottom")
+
+        tk.Label(chat_outer, text="💬  AI Stylist Chat",
+                 font=FONTS["heading_small"], fg=COLOURS["gold_dark"],
+                 bg=COLOURS["bg_primary"]).pack(anchor="w", padx=12, pady=(8,2))
+
+        self.chat_display = scrolledtext.ScrolledText(
+            chat_outer, height=6, font=FONTS["body"],
+            bg=COLOURS["bg_primary"], fg=COLOURS["text_primary"],
+            relief="flat", state="disabled", wrap="word", highlightthickness=0)
+        self.chat_display.pack(fill="x", padx=8, pady=(0,4))
+        self.chat_display.tag_configure("user_msg",
+                                        foreground=COLOURS["gold_dark"], font=FONTS["body_bold"])
+        self.chat_display.tag_configure("ai_msg",
+                                        foreground=COLOURS["text_primary"], font=FONTS["body"])
+        self.chat_display.tag_configure("ai_label",
+                                        foreground=COLOURS["gold_primary"], font=FONTS["small"])
+
+        input_row = tk.Frame(chat_outer, bg=COLOURS["bg_primary"])
+        input_row.pack(fill="x", padx=8, pady=(0,8))
+
+        self.chat_input = tk.Entry(input_row, font=FONTS["body"],
+                                   bg=COLOURS["bg_input"], fg=COLOURS["text_primary"],
+                                   relief="flat", bd=4, highlightthickness=1,
+                                   highlightbackground=COLOURS["border_light"],
+                                   highlightcolor=COLOURS["gold_primary"],
+                                   insertbackground=COLOURS["gold_primary"])
+        self.chat_input.pack(side="left", fill="x", expand=True, padx=(0,6))
+        self.chat_input.bind("<Return>", lambda e: self._send_chat())
+
+        send_btn = tk.Button(input_row, text="Send ➤", font=FONTS["body_bold"],
+                             bg=COLOURS["gold_primary"], fg=COLOURS["bg_primary"],
+                             relief="flat", bd=0, padx=12, pady=6, cursor="hand2",
+                             command=self._send_chat)
+        send_btn.pack(side="left")
+        send_btn.bind("<Enter>", lambda e: send_btn.config(bg=COLOURS["gold_dark"]))
+        send_btn.bind("<Leave>", lambda e: send_btn.config(bg=COLOURS["gold_primary"]))
+
+    # =========================================================
+    # GENERATION — on click, thread, done
+    # =========================================================
     def _on_generate(self):
-        """Called when the user clicks Generate. Starts background thread."""
-        # Disable button while running so user doesn't click twice
         self.gen_btn.config(state="disabled", text="⏳  Generating...")
-        self.progress.start(12)   # start spinning at 12ms intervals
+        self.progress.start(12)
         self.status_var.set("🌐  Scouting 2026 trends...")
 
-        # Build user_input_dict from GUI selections
-        user_input = {
-            "name":             self.name_var.get() or "Valued Customer",
-            "body_type":        self.selected_body.get(),
-            "skin_undertone":   self.selected_undertone.get(),
-            "budget_min":       int(self.budget_min_var.get()),
-            "budget_max":       int(self.budget_max_var.get()),
-            "size":             self.selected_size.get(),
-            "occasion":         self.selected_occasion.get().lower().replace(" / "," ").replace(" ","_"),
-            "vibe":             self.selected_vibe.get(),
-            "favourite_colours": list(self.fav_colours) or ["#C67C5A"],
-            "avoid_colours":    list(self.avoid_colours),
-            "colour_harmony":   self.selected_harmony.get(),
-            "user_id":          1,
-        }
+        # Map GUI label → DB keyword (fixes the occasion mismatch bug)
+        raw_occ    = self.selected_occasion.get()
+        mapped_occ = OCCASION_MAP.get(
+            raw_occ, raw_occ.lower().replace(" / ", " ").replace(" ", "_"))
 
-        # Run the agent pipeline in a background thread
-        thread = threading.Thread(
-            target=self._run_pipeline_thread,
-            args=(user_input,),
-            daemon=True    # daemon = stop thread when main window closes
-        )
-        thread.start()
+        user_input = {
+            "name":              self.name_var.get() or "Valued Customer",
+            "body_type":         self.selected_body.get(),
+            "skin_undertone":    self.selected_undertone.get(),
+            "total_budget":      self.selected_budget.get(),   # Upgrade 2: single budget
+            "size":              self.selected_size.get(),
+            "occasion":          mapped_occ,
+            "vibe":              self.selected_vibe.get(),
+            "favourite_colours": list(self.fav_colours) or ["#C67C5A"],
+            "avoid_colours":     list(self.avoid_colours),
+            "colour_harmony":    self.selected_harmony.get(),
+            "user_id":           1,
+        }
+        threading.Thread(target=self._run_pipeline_thread,
+                         args=(user_input,), daemon=True).start()
 
     def _run_pipeline_thread(self, user_input):
-        """
-        Background thread function — runs all 5 agents.
-        Updates status labels via root.after() (thread-safe Tk calls).
-        """
         def set_status(msg):
-            """Thread-safe status update."""
             self.root.after(0, lambda: self.status_var.set(msg))
-
         try:
-            set_status("🌐  Scouting 2026 trends...")
+            set_status("🤖  Running Style Agent pipeline...")
             from workflow.langgraph_state import run_pipeline
-            result = run_pipeline(user_input)   # runs all 5 agents, returns state dict
-
-            # Store results and update UI on the main thread
+            result          = run_pipeline(user_input)
             self.outfit_results = result.get("final_recommendations", [])
             self.root.after(0, lambda: self._display_results(result))
-
-        except Exception as error:
-            self.root.after(0, lambda: self.status_var.set(f"⚠️  Error: {error}"))
-
+        except Exception as err:
+            self.root.after(0, lambda: self.status_var.set(f"⚠️  Error: {err}"))
         finally:
-            # Re-enable button and stop progress bar (always runs)
             self.root.after(0, self._generation_done)
 
     def _generation_done(self):
-        """Called on the main thread after generation completes."""
         self.progress.stop()
-        self.gen_btn.config(state="normal", text="✨  Generate My Outfits")
+        self.gen_btn.config(state="normal", text="✦  Generate My Outfits")
         self.status_var.set("✅  Your looks are ready!")
 
     # =========================================================
-    # PANEL 5 — RESULTS DISPLAY
+    # RESULTS — draw outfit cards
     # =========================================================
-    def _build_panel5_results(self, parent):
-        """Right panel: scrollable Canvas with 3 outfit cards."""
-        panel = tk.Frame(parent, bg=BG_PANEL, relief="flat")
-        panel.pack(fill="both", expand=True, padx=4, pady=4)
-
-        self._lbl(panel, "👗  Your Looks", bg=BG_PANEL).pack(pady=(8, 4))
-        ttk.Separator(panel, orient="horizontal").pack(fill="x", padx=8, pady=2)
-
-        # Scrollable canvas
-        self.results_canvas = tk.Canvas(panel, bg=BG_PANEL, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(panel, orient="vertical", command=self.results_canvas.yview)
-        self.results_canvas.configure(yscrollcommand=scrollbar.set)
-
-        scrollbar.pack(side="right", fill="y")
-        self.results_canvas.pack(side="left", fill="both", expand=True)
-
-        # This inner frame is what we actually pack things into
-        self.results_inner = tk.Frame(self.results_canvas, bg=BG_PANEL)
-        self.results_canvas_win = self.results_canvas.create_window(
-            (0, 0), window=self.results_inner, anchor="nw"
-        )
-
-        # Bind resize to keep canvas scrollregion updated
-        self.results_inner.bind("<Configure>", self._on_results_resize)
-        self.results_canvas.bind("<Configure>", self._on_canvas_resize)
-
-        # Mouse wheel scrolling
-        self.results_canvas.bind_all("<MouseWheel>",
-            lambda e: self.results_canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
-
-        # Placeholder text
-        tk.Label(self.results_inner, text="Your outfit recommendations\nwill appear here.",
-                 font=FONT_BODY, fg=GREY, bg=BG_PANEL, justify="center").pack(pady=40)
-
-    def _on_results_resize(self, event):
-        """Updates scroll region when items are added to the results panel."""
-        self.results_canvas.configure(scrollregion=self.results_canvas.bbox("all"))
-
-    def _on_canvas_resize(self, event):
-        """Keeps the inner frame the same width as the canvas."""
-        self.results_canvas.itemconfig(self.results_canvas_win, width=event.width)
-
     def _display_results(self, state_dict):
-        """Clears old results and draws 3 fresh outfit cards."""
-        # Clear all existing widgets in the inner frame
-        for widget in self.results_inner.winfo_children():
-            widget.destroy()
-
-        recommendations = state_dict.get("final_recommendations", [])
-        errors          = state_dict.get("error_log", [])
-
-        if errors:
-            tk.Label(self.results_inner, text=f"⚠️ {len(errors)} agent(s) used fallback data.",
-                     font=FONT_SMALL, fg="#FFAA00", bg=BG_PANEL).pack(pady=4)
-
-        if not recommendations:
+        for w in self.results_inner.winfo_children():
+            w.destroy()
+        recs = state_dict.get("final_recommendations", [])
+        if not recs:
             tk.Label(self.results_inner,
-                     text="No outfits found.\nPlease run: python database/setup_database.py\nthen try again.",
-                     font=FONT_BODY, fg=GREY, bg=BG_PANEL, justify="center").pack(pady=30)
+                     text="No outfits found.\nRun setup_database.py then try again.",
+                     font=FONTS["body"], fg=COLOURS["text_muted"],
+                     bg=COLOURS["bg_primary"], justify="center").pack(pady=30)
             return
-
-        for i, rec in enumerate(recommendations):
+        for i, rec in enumerate(recs):
             self._build_outfit_card(self.results_inner, rec, i + 1)
+        self.status_var.set(f"✅  {len(recs)} looks generated!")
 
-        # Update status
-        self.status_var.set(f"✅  {len(recommendations)} looks generated!")
+    # ── Helper: clickable shopping link label (Upgrade 1) ─────
+    def _add_shopping_link(self, parent, url, source):
+        lbl = tk.Label(parent, text=f"🛍  Buy on {source}",
+                       font=FONTS["link"], fg=COLOURS["gold_primary"],
+                       bg=COLOURS["bg_card"], cursor="hand2")
+        lbl.pack(anchor="w", padx=32, pady=1)
+        lbl.bind("<Enter>", lambda e: lbl.config(fg=COLOURS["gold_dark"]))
+        lbl.bind("<Leave>", lambda e: lbl.config(fg=COLOURS["gold_primary"]))
+        if url:
+            lbl.bind("<Button-1>", lambda e: webbrowser.open(url))
 
+    # ── Helper: thin budget bar inside card (Upgrade 2) ───────
+    def _draw_budget_bar(self, parent, total_cost, total_budget):
+        if total_budget <= 0:
+            return
+        fraction = min(total_cost / total_budget, 1.0)
+        bar = tk.Canvas(parent, height=6, bg=COLOURS["bg_card"], highlightthickness=0)
+        bar.pack(fill="x", padx=16, pady=(2,4))
+        bar.update_idletasks()
+        width = bar.winfo_width() or 300
+        bar.create_rectangle(0, 0, width, 6, fill=COLOURS["border_light"], outline="")
+        bar.create_rectangle(0, 0, int(width * fraction), 6,
+                             fill=COLOURS["gold_primary"], outline="")
+
+    # ── Main outfit card widget ───────────────────────────────
     def _build_outfit_card(self, parent, rec, outfit_num):
-        """Draws one outfit card widget with all details."""
-        outfit  = rec.get("outfit", {})
-        kit     = rec.get("jewellery_kit", {})
+        outfit       = rec.get("outfit", {})
+        kit          = rec.get("jewellery_kit", {})
+        total_cost   = outfit.get("total_cost", 0)
+        total_budget = outfit.get("budget_given", 0)
 
-        # Card frame
-        card = tk.Frame(parent, bg=BG_CARD, relief="ridge", bd=1)
-        card.pack(fill="x", padx=6, pady=6)
+        # Card outer frame — cream background, light border
+        card = tk.Frame(parent, bg=COLOURS["bg_card"],
+                        highlightthickness=1,
+                        highlightbackground=COLOURS["border_light"])
+        card.pack(fill="x", padx=8, pady=6)
 
-        # ── Card heading + palette name ───────────────────────
-        palette_name = outfit.get("palette_name", f"Look {outfit_num}")
-        tk.Label(card, text=f"  ✦  {palette_name}",
-                 font=FONT_SUBHEAD, fg=GOLD, bg=BG_CARD).pack(anchor="w", padx=10, pady=(8,2))
+        # Palette name heading
+        tk.Label(card, text=f"  {outfit.get('palette_name', f'Look {outfit_num}')}",
+                 font=FONTS["heading_small"], fg=COLOURS["gold_dark"],
+                 bg=COLOURS["bg_card"]).pack(anchor="w", padx=12, pady=(10,2))
 
-        # ── Colour swatches ───────────────────────────────────
-        swatch_frame = tk.Frame(card, bg=BG_CARD)
-        swatch_frame.pack(anchor="w", padx=10, pady=(0, 6))
+        # Colour swatches row
+        sw = tk.Frame(card, bg=COLOURS["bg_card"])
+        sw.pack(anchor="w", padx=12, pady=(0,6))
+        for s in outfit.get("colour_swatches", []):
+            tk.Label(sw, bg=s.get("hex","#888"), width=3, height=1,
+                     relief="raised").pack(side="left", padx=2)
+            tk.Label(sw, text=s.get("name",""), font=FONTS["small"],
+                     fg=COLOURS["text_secondary"],
+                     bg=COLOURS["bg_card"]).pack(side="left", padx=(0,8))
 
-        for swatch in outfit.get("colour_swatches", []):
-            colour_hex  = swatch.get("hex", "#888")
-            colour_name = swatch.get("name", "")
-            dot = tk.Label(swatch_frame, bg=colour_hex, width=3, height=1, relief="raised")
-            dot.pack(side="left", padx=2)
-            tk.Label(swatch_frame, text=colour_name, font=FONT_SMALL, fg=GREY, bg=BG_CARD).pack(side="left", padx=(0,8))
+        tk.Frame(card, bg=COLOURS["border_light"], height=1).pack(fill="x", padx=12, pady=2)
 
-        ttk.Separator(card, orient="horizontal").pack(fill="x", padx=10, pady=2)
+        # CLOTHING section
+        tk.Label(card, text="CLOTHING", font=FONTS["small"],
+                 fg=COLOURS["gold_dark"], bg=COLOURS["bg_card"]).pack(
+            anchor="w", padx=12, pady=(6,2))
 
-        # ── Clothing items ────────────────────────────────────
-        items = outfit.get("items", {})
-        item_labels = {
-            "dress":    "👗 DRESS",
-            "top":      "👚 TOP",
-            "bottom":   "👖 BOTTOM",
-            "outerwear":"🧥 OUTERWEAR",
-            "footwear": "👠 FOOTWEAR",
-            "bag":      "👜 BAG",
-        }
-        for key, label in item_labels.items():
-            item = items.get(key)
-            if item and isinstance(item, dict):
-                name  = item.get("name", "")
-                price = item.get("price", "")
-                if name:
-                    row = tk.Frame(card, bg=BG_CARD)
-                    row.pack(fill="x", padx=10, pady=1)
-                    tk.Label(row, text=f"{label}:", font=FONT_SMALL, fg=GOLD,
-                             bg=BG_CARD, width=12, anchor="w").pack(side="left")
-                    tk.Label(row, text=f"{name}  {price}", font=FONT_SMALL, fg=WHITE,
-                             bg=BG_CARD, wraplength=300, justify="left", anchor="w").pack(side="left", fill="x")
+        item_labels = [("dress","👗 DRESS"),("top","👚 TOP"),("bottom","👖 BOTTOM"),
+                       ("outerwear","🧥 LAYER"),("footwear","👠 FOOTWEAR"),("bag","👜 BAG")]
+        for key, label in item_labels:
+            item = outfit.get("items", {}).get(key)
+            if not item or not isinstance(item, dict):
+                continue
+            name  = item.get("name","")
+            price = item.get("price","")
+            if not name:
+                continue
+            row = tk.Frame(card, bg=COLOURS["bg_card"])
+            row.pack(fill="x", padx=12, pady=1)
+            tk.Label(row, text=f"↳ {label}:", font=FONTS["small"],
+                     fg=COLOURS["gold_primary"], bg=COLOURS["bg_card"],
+                     width=13, anchor="w").pack(side="left")
+            tk.Label(row, text=f"{name}  {price}", font=FONTS["small"],
+                     fg=COLOURS["text_primary"], bg=COLOURS["bg_card"],
+                     wraplength=240, justify="left", anchor="w").pack(side="left", fill="x")
+            # Shopping link (Upgrade 1)
+            link_url = item.get("shopping_link","")
+            source   = item.get("link_source","Google Shopping")
+            if link_url:
+                self._add_shopping_link(card, link_url, source)
 
-        # Total cost
-        total = outfit.get("total_estimated_cost", "")
-        if total:
-            tk.Label(card, text=f"  💰 Total: {total}", font=FONT_SMALL, fg=GREEN,
-                     bg=BG_CARD).pack(anchor="w", padx=10, pady=2)
+        tk.Frame(card, bg=COLOURS["border_light"], height=1).pack(fill="x", padx=12, pady=2)
 
-        ttk.Separator(card, orient="horizontal").pack(fill="x", padx=10, pady=2)
-
-        # ── Jewellery Kit ─────────────────────────────────────
+        # JEWELLERY section
         if kit:
-            tk.Label(card, text="  💎 JEWELLERY KIT", font=FONT_SMALL, fg=GOLD,
-                     bg=BG_CARD).pack(anchor="w", padx=10, pady=(4,2))
-            for j_key in ["earrings","necklace","bangles","rings","maang_tikka","optional_extras"]:
-                val = kit.get(j_key, "")
-                if val and val != "Skip — not applicable for this vibe/occasion combination":
-                    j_label = j_key.replace("_"," ").title()
-                    row = tk.Frame(card, bg=BG_CARD)
-                    row.pack(fill="x", padx=10, pady=1)
-                    tk.Label(row, text=f"{j_label}:", font=FONT_SMALL, fg=GREY,
-                             bg=BG_CARD, width=14, anchor="w").pack(side="left")
-                    tk.Label(row, text=val, font=FONT_SMALL, fg=WHITE, bg=BG_CARD,
-                             wraplength=260, justify="left", anchor="w").pack(side="left", fill="x")
+            tk.Label(card, text="JEWELLERY", font=FONTS["small"],
+                     fg=COLOURS["gold_dark"], bg=COLOURS["bg_card"]).pack(
+                anchor="w", padx=12, pady=(4,2))
+            for jk in ["earrings","necklace","bangles","rings","maang_tikka","optional_extras"]:
+                val = kit.get(jk,"")
+                if val and "Skip" not in str(val):
+                    jr = tk.Frame(card, bg=COLOURS["bg_card"])
+                    jr.pack(fill="x", padx=12, pady=1)
+                    tk.Label(jr, text=f"↳ {jk.replace('_',' ').title()}:",
+                             font=FONTS["small"], fg=COLOURS["text_secondary"],
+                             bg=COLOURS["bg_card"], width=16, anchor="w").pack(side="left")
+                    tk.Label(jr, text=val, font=FONTS["small"],
+                             fg=COLOURS["text_primary"], bg=COLOURS["bg_card"],
+                             wraplength=220, justify="left", anchor="w").pack(side="left")
+            frag = kit.get("fragrance_note","")
+            if frag:
+                tk.Label(card, text=f"🌸 {frag}", font=FONTS["small"],
+                         fg=COLOURS["text_secondary"], bg=COLOURS["bg_card"],
+                         wraplength=330, justify="left").pack(anchor="w", padx=12, pady=2)
 
-            # Fragrance note
-            fragrance = kit.get("fragrance_note", "")
-            if fragrance:
-                tk.Label(card, text=f"  🌸 Fragrance: {fragrance}", font=FONT_SMALL,
-                         fg=GREY, bg=BG_CARD, wraplength=360, justify="left").pack(
-                    anchor="w", padx=10, pady=2)
+        tk.Frame(card, bg=COLOURS["border_light"], height=1).pack(fill="x", padx=12, pady=2)
 
-        ttk.Separator(card, orient="horizontal").pack(fill="x", padx=10, pady=2)
+        # BUDGET BAR (Upgrade 2)
+        if total_budget > 0:
+            br = tk.Frame(card, bg=COLOURS["bg_card"])
+            br.pack(fill="x", padx=12, pady=2)
+            remaining  = total_budget - total_cost
+            rem_text   = f"  ₹{remaining:,.0f} remaining" if remaining >= 0 else f"  ₹{-remaining:,.0f} over budget"
+            rem_colour = COLOURS["success"] if remaining >= 0 else COLOURS["error"]
+            tk.Label(br, text="TOTAL:", font=FONTS["small"],
+                     fg=COLOURS["gold_dark"], bg=COLOURS["bg_card"]).pack(side="left")
+            tk.Label(br, text=f"  ₹{total_cost:,.0f}  of  ₹{total_budget:,}",
+                     font=FONTS["body_bold"], fg=COLOURS["text_primary"],
+                     bg=COLOURS["bg_card"]).pack(side="left")
+            tk.Label(br, text=rem_text, font=FONTS["small"],
+                     fg=rem_colour, bg=COLOURS["bg_card"]).pack(side="left")
+            self._draw_budget_bar(card, total_cost, total_budget)
 
-        # ── Why This Works ────────────────────────────────────
-        why = outfit.get("why_this_works", "")
+        tk.Frame(card, bg=COLOURS["border_light"], height=1).pack(fill="x", padx=12, pady=2)
+
+        # WHY THIS WORKS
+        why = outfit.get("why_this_works","")
         if why:
-            tk.Label(card, text="  ✨ Why This Works", font=FONT_SMALL, fg=GOLD, bg=BG_CARD).pack(anchor="w", padx=10)
-            tk.Label(card, text=why, font=("Segoe UI", 9, "italic"), fg=GREY, bg=BG_CARD,
-                     wraplength=370, justify="left").pack(anchor="w", padx=14, pady=(2, 4))
+            tk.Label(card, text="WHY THIS WORKS", font=FONTS["small"],
+                     fg=COLOURS["gold_dark"], bg=COLOURS["bg_card"]).pack(anchor="w", padx=12)
+            tk.Label(card, text=why, font=("Segoe UI", 9, "italic"),
+                     fg=COLOURS["text_secondary"], bg=COLOURS["bg_card"],
+                     wraplength=330, justify="left").pack(anchor="w", padx=16, pady=(2,4))
 
-        # ── Occasion Notes ────────────────────────────────────
+        # STYLIST TIPS
         notes = outfit.get("occasion_notes", [])
         if notes:
-            tk.Label(card, text="  📌 Stylist Tips", font=FONT_SMALL, fg=GOLD, bg=BG_CARD).pack(anchor="w", padx=10)
+            tk.Label(card, text="STYLIST TIPS", font=FONTS["small"],
+                     fg=COLOURS["gold_dark"], bg=COLOURS["bg_card"]).pack(anchor="w", padx=12)
             for note in notes:
-                tk.Label(card, text=f"    • {note}", font=FONT_SMALL, fg=WHITE, bg=BG_CARD,
-                         wraplength=370, justify="left").pack(anchor="w", padx=14, pady=1)
+                tk.Label(card, text=f"  • {note}", font=FONTS["small"],
+                         fg=COLOURS["text_primary"], bg=COLOURS["bg_card"],
+                         wraplength=330, justify="left").pack(anchor="w", padx=16, pady=1)
 
-        # ── Action buttons ────────────────────────────────────
-        btn_frame = tk.Frame(card, bg=BG_CARD)
-        btn_frame.pack(fill="x", padx=10, pady=(6, 10))
+        # Action buttons
+        bf = tk.Frame(card, bg=COLOURS["bg_card"])
+        bf.pack(fill="x", padx=12, pady=(6,10))
 
-        tk.Button(btn_frame, text="💾 Save This Look", font=FONT_SMALL,
-                  bg=GOLD, fg=BG_DARK, relief="flat", padx=8, pady=4, cursor="hand2",
-                  command=lambda r=rec, n=outfit_num: self._save_look(r, n)
-                  ).pack(side="left", padx=(0, 6))
+        sb_btn = tk.Button(bf, text="💾 Save This Look", font=FONTS["small"],
+                           bg=COLOURS["gold_primary"], fg=COLOURS["bg_primary"],
+                           relief="flat", padx=10, pady=5, cursor="hand2",
+                           command=lambda r=rec, n=outfit_num: self._save_look(r, n))
+        sb_btn.pack(side="left", padx=(0,6))
+        sb_btn.bind("<Enter>", lambda e: sb_btn.config(bg=COLOURS["gold_dark"]))
+        sb_btn.bind("<Leave>", lambda e: sb_btn.config(bg=COLOURS["gold_primary"]))
 
-        tk.Button(btn_frame, text="📊 Export to Tableau", font=FONT_SMALL,
-                  bg=BG_PANEL, fg=WHITE, relief="flat", padx=8, pady=4, cursor="hand2",
-                  command=lambda: self._export_tableau()
-                  ).pack(side="left")
+        ex_btn = tk.Button(bf, text="📊 Export CSV", font=FONTS["small"],
+                           bg=COLOURS["bg_input"], fg=COLOURS["text_primary"],
+                           relief="flat", padx=10, pady=5, cursor="hand2",
+                           command=self._export_tableau)
+        ex_btn.pack(side="left")
 
+    # =========================================================
+    # SAVE / EXPORT
+    # =========================================================
     def _save_look(self, rec, num):
-        """Saves a single outfit recommendation to outputs/outfit_recommendation.json."""
         out_dir  = os.path.join(PROJECT_ROOT, "outputs")
         os.makedirs(out_dir, exist_ok=True)
         out_path = os.path.join(out_dir, "outfit_recommendation.json")
@@ -739,35 +1336,30 @@ class StyleAgentApp:
             self.status_var.set(f"⚠️  Save failed: {e}")
 
     def _export_tableau(self):
-        """Exports all current outfit results to outputs/tableau_export.csv."""
         out_dir  = os.path.join(PROJECT_ROOT, "outputs")
         os.makedirs(out_dir, exist_ok=True)
         out_path = os.path.join(out_dir, "tableau_export.csv")
         try:
             rows = []
             for rec in self.outfit_results:
-                outfit  = rec.get("outfit", {})
-                kit     = rec.get("jewellery_kit", {})
-                palette = outfit.get("palette_name", "")
-                items   = outfit.get("items", {})
+                outfit = rec.get("outfit", {})
+                kit    = rec.get("jewellery_kit", {})
+                items  = outfit.get("items", {})
                 rows.append({
-                    "outfit_number":    outfit.get("outfit_number", ""),
-                    "palette_name":     palette,
-                    "primary_colour":   outfit.get("colour_swatches", [{}])[0].get("name",""),
-                    "secondary_colour": outfit.get("colour_swatches", [{}]*2)[1].get("name","") if len(outfit.get("colour_swatches",[])) > 1 else "",
-                    "top":              items.get("top", {}).get("name","") or items.get("dress",{}).get("name",""),
-                    "bottom":           items.get("bottom", {}).get("name",""),
-                    "outerwear":        items.get("outerwear",{}).get("name",""),
-                    "footwear":         items.get("footwear",{}).get("name",""),
-                    "bag":              items.get("bag",{}).get("name",""),
-                    "total_cost":       outfit.get("total_estimated_cost",""),
-                    "earrings":         kit.get("earrings",""),
-                    "necklace":         kit.get("necklace",""),
-                    "occasion":         "",
-                    "vibe":             "",
-                    "fragrance":        kit.get("fragrance_note",""),
+                    "outfit_number": outfit.get("outfit_number",""),
+                    "palette_name":  outfit.get("palette_name",""),
+                    "total_cost":    outfit.get("total_cost",""),
+                    "budget_given":  outfit.get("budget_given",""),
+                    "top":     (items.get("top") or {}).get("name","") or
+                               (items.get("dress") or {}).get("name",""),
+                    "bottom":      (items.get("bottom") or {}).get("name",""),
+                    "outerwear":   (items.get("outerwear") or {}).get("name",""),
+                    "footwear":    (items.get("footwear") or {}).get("name",""),
+                    "bag":         (items.get("bag") or {}).get("name",""),
+                    "earrings":    kit.get("earrings",""),
+                    "necklace":    kit.get("necklace",""),
+                    "fragrance":   kit.get("fragrance_note",""),
                 })
-
             if rows:
                 with open(out_path, "w", newline="", encoding="utf-8") as f:
                     writer = csv.DictWriter(f, fieldnames=rows[0].keys())
@@ -780,125 +1372,44 @@ class StyleAgentApp:
             self.status_var.set(f"⚠️  Export failed: {e}")
 
     # =========================================================
-    # PANEL 6 — AI STYLIST CHAT
+    # AI STYLIST CHAT
     # =========================================================
-    def _build_panel6_chat(self, parent):
-        """Bottom strip: scrollable chat + input field + Send button."""
-        panel = tk.Frame(parent, bg=BG_PANEL, relief="flat", bd=0)
-        panel.pack(fill="x", padx=4, pady=(2, 0))
-
-        tk.Label(panel, text="💬  AI Stylist Chat", font=FONT_SUBHEAD, fg=GOLD,
-                 bg=BG_PANEL).pack(anchor="w", padx=10, pady=(6, 2))
-
-        # Scrollable chat history display
-        self.chat_display = scrolledtext.ScrolledText(
-            panel, height=5, font=FONT_SMALL,
-            bg=BG_CARD, fg=WHITE, insertbackground=WHITE,
-            relief="flat", state="disabled", wrap="word"
-        )
-        self.chat_display.pack(fill="x", padx=8, pady=(0, 4))
-
-        # Add a welcome message
-        self._chat_append("AI Stylist", "Hello! Ask me anything about fashion, colours, or your outfit. Try: 'What jewellery works with a V-neck blouse?'")
-
-        # Input row: Entry + Send button side by side
-        input_row = tk.Frame(panel, bg=BG_PANEL)
-        input_row.pack(fill="x", padx=8, pady=(0, 8))
-
-        self.chat_entry = tk.Entry(input_row, font=FONT_BODY, bg=BG_CARD, fg=WHITE,
-                                   insertbackground=WHITE, relief="flat", bd=4)
-        self.chat_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        self.chat_entry.insert(0, "Ask your AI stylist anything...")
-        self.chat_entry.bind("<FocusIn>",  lambda e: self._clear_placeholder())
-        self.chat_entry.bind("<FocusOut>", lambda e: self._restore_placeholder())
-        self.chat_entry.bind("<Return>",   lambda e: self._send_chat())
-
-        tk.Button(input_row, text="Send ▶", font=FONT_BTN, bg=GOLD, fg=BG_DARK,
-                  relief="flat", padx=12, pady=4, cursor="hand2",
-                  command=self._send_chat).pack(side="left")
-
-    def _clear_placeholder(self):
-        """Remove placeholder text when user clicks the chat entry."""
-        if self.chat_entry.get() == "Ask your AI stylist anything...":
-            self.chat_entry.delete(0, "end")
-            self.chat_entry.config(fg=WHITE)
-
-    def _restore_placeholder(self):
-        """Restore placeholder text if the entry is empty."""
-        if not self.chat_entry.get().strip():
-            self.chat_entry.insert(0, "Ask your AI stylist anything...")
-            self.chat_entry.config(fg=GREY)
-
-    def _chat_append(self, speaker, message):
-        """Appends a message to the chat display widget."""
-        self.chat_display.config(state="normal")    # enable editing temporarily
-        self.chat_display.insert("end", f"\n{speaker}: {message}\n")
-        self.chat_display.see("end")                # scroll to bottom
-        self.chat_display.config(state="disabled")  # lock back to read-only
-
     def _send_chat(self):
-        """Sends the chat message to Ollama llama3 and displays the response."""
-        user_msg = self.chat_entry.get().strip()
-        if not user_msg or user_msg == "Ask your AI stylist anything...":
+        msg = self.chat_input.get().strip()
+        if not msg:
             return
+        self.chat_input.delete(0, "end")
+        self._chat_append(f"You: {msg}\n", "user_msg")
+        threading.Thread(target=self._ollama_thread, args=(msg,), daemon=True).start()
 
-        self.chat_entry.delete(0, "end")
-        self._chat_append("You", user_msg)
-
-        # Build system context with current outfit data
-        context_summary = ""
-        if self.outfit_results:
-            context_summary = f"The user has generated outfit recommendations for: {self.outfit_results[0].get('outfit', {}).get('palette_name', '')}. "
-
-        system_prompt = (
-            "You are a world-class Indian fashion stylist specialising in Indian women's fashion. "
-            "You have encyclopaedic knowledge of Indian occasions, fabrics, jewellery, and colour theory. "
-            "Give warm, specific, actionable advice — never vague. "
-            "Always mention specific fabrics, colour names, and jewellery types. "
-            + context_summary
-        )
-
-        # Run Ollama in a background thread so the GUI stays responsive
-        threading.Thread(
-            target=self._chat_thread,
-            args=(user_msg, system_prompt),
-            daemon=True
-        ).start()
-
-    def _chat_thread(self, user_msg, system_prompt):
-        """Background thread: calls Ollama and posts the reply to the chat."""
+    def _ollama_thread(self, msg):
+        def ap(text, tag="ai_msg"):
+            self.root.after(0, lambda: self._chat_append(text, tag))
         if not OLLAMA_OK:
-            reply = ("Ollama is not installed. Run: pip install ollama\n"
-                     "Then install llama3: ollama pull llama3\n"
-                     "Once done, restart this app and the AI chat will work!")
-        else:
-            try:
-                response = ollama.chat(
-                    model="llama3",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user",   "content": user_msg},
-                    ]
-                )
-                reply = response["message"]["content"]
-            except Exception as e:
-                reply = (f"Cannot reach Ollama: {e}\n"
-                         f"Make sure Ollama is running: open a terminal and type 'ollama serve'")
+            ap("Style Agent: Install Ollama and run 'ollama pull llama3' to activate AI chat.\n")
+            return
+        try:
+            import ollama
+            ap("Style Agent: ", "ai_label")
+            resp = ollama.chat(
+                model="llama3",
+                messages=[
+                    {"role": "system",
+                     "content": "You are Style Agent, a luxury fashion stylist specialising "
+                                "in Indian fashion. Give concise, expert styling advice."},
+                    {"role": "user", "content": msg},
+                ])
+            ap(resp["message"]["content"] + "\n\n")
+        except Exception as e:
+            ap(f"Chat error: {e}\n")
 
-        # Post the reply to the GUI on the main thread
-        self.root.after(0, lambda: self._chat_append("AI Stylist", reply))
+    def _chat_append(self, text, tag="ai_msg"):
+        self.chat_display.config(state="normal")
+        self.chat_display.insert("end", text, tag)
+        self.chat_display.config(state="disabled")
+        self.chat_display.see("end")
 
-    # =========================================================
-    # RUN
-    # =========================================================
+    # ── Entry point ───────────────────────────────────────────
     def run(self):
-        """Starts the Tkinter main event loop — keeps the window open."""
         self.root.mainloop()
 
-
-# =============================================================
-# MAIN — launch the app when this file is run directly
-# =============================================================
-if __name__ == "__main__":
-    app = StyleAgentApp()
-    app.run()

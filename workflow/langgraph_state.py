@@ -69,6 +69,7 @@ class StyleAgentState(TypedDict):
     jewellery_kits:       list   # output from Agent 5 — 3 jewellery kit dicts
     final_recommendations: list  # combined final output list (outfits + jewellery merged)
     error_log:            list   # any errors caught during execution (so app keeps running)
+    total_budget:         int    # Upgrade 2: single total outfit budget from the GUI
 
 
 # =============================================================
@@ -139,14 +140,13 @@ def node_persona(state: StyleAgentState) -> StyleAgentState:
         error_message = f"PersonaAgent failed: {str(error)}"
         state["error_log"].append(error_message)
         # Use safe defaults so the pipeline can still produce outfit suggestions
+        # Upgrade 2: no longer using budget_min/budget_max — just total_budget
         state["user_persona"] = {
-            "skin_undertone": state["user_input"].get("skin_undertone", "warm"),
-            "body_type":      state["user_input"].get("body_type", "Hourglass"),
-            "budget_min":     state["user_input"].get("budget_min", 2000),
-            "budget_max":     state["user_input"].get("budget_max", 20000),
-            "size":           state["user_input"].get("size", "M"),
+            "skin_undertone":    state["user_input"].get("skin_undertone", "warm"),
+            "body_type":         state["user_input"].get("body_type", "Hourglass"),
+            "size":              state["user_input"].get("size", "M"),
             "preferred_fabrics": ["Cotton", "Silk", "Georgette"],
-            "persona_name":   "Ethnic Royale",
+            "persona_name":      "Ethnic Royale",
         }
         print(f"  [2/5] ⚠️   Persona Agent error: {error}")
 
@@ -219,19 +219,27 @@ def node_wardrobe(state: StyleAgentState) -> StyleAgentState:
     """
     Node 4: Runs the Wardrobe Architect Agent.
     Queries the inventory database and builds 3 complete outfits.
+    Upgrade 2: now passes total_budget so the agent can distribute
+    spending across pieces rather than applying one flat budget.
     """
     print("\n  [4/5] 👗  Wardrobe Architect — Building your outfits...")
     try:
-        user_input  = state["user_input"]
-        occasion    = user_input.get("occasion", "festival")
-        vibe        = user_input.get("vibe", "Ethnic")
+        user_input   = state["user_input"]
+        occasion     = user_input.get("occasion", "festival")
+        vibe         = user_input.get("vibe", "Ethnic")
+
+        # Upgrade 2: read total_budget from state (set by the GUI via _on_generate)
+        # Fall back to 15000 if not set, so the app never crashes
+        total_budget = state.get("total_budget",
+                       user_input.get("total_budget", 15000))
 
         agent   = WardrobeArchitectAgent()
         outfits = agent.run(
-            palettes = state["colour_palettes"],
-            persona  = state["user_persona"],
-            occasion = occasion,
-            vibe     = vibe
+            palettes     = state["colour_palettes"],
+            persona      = state["user_persona"],
+            occasion     = occasion,
+            vibe         = vibe,
+            total_budget = total_budget,   # Upgrade 2: pass the full outfit budget
         )  # returns list of 3 outfit dicts
 
         state["outfit_options"] = outfits
@@ -380,15 +388,20 @@ def run_pipeline(user_input_dict: dict) -> dict:
     print("=" * 55)
 
     # Step 1: Create the initial state with empty slots for each agent to fill
+    # Upgrade 2: extract total_budget from user_input and store at top level of state
+    # This allows node_wardrobe to read it directly without digging into user_input
+    total_budget = user_input_dict.get("total_budget", 15000)   # default ₹15,000
+
     initial_state: StyleAgentState = {
-        "user_input":            user_input_dict,  # user's selections from GUI
-        "trend_brief":           {},               # will be filled by Agent 1
-        "user_persona":          {},               # will be filled by Agent 2
-        "colour_palettes":       [],               # will be filled by Agent 3
-        "outfit_options":        [],               # will be filled by Agent 4
-        "jewellery_kits":        [],               # will be filled by Agent 5
-        "final_recommendations": [],               # will be filled by merge node
-        "error_log":             [],               # starts empty, errors added here
+        "user_input":            user_input_dict,   # user's selections from GUI
+        "trend_brief":           {},                # will be filled by Agent 1
+        "user_persona":          {},                # will be filled by Agent 2
+        "colour_palettes":       [],                # will be filled by Agent 3
+        "outfit_options":        [],                # will be filled by Agent 4
+        "jewellery_kits":        [],                # will be filled by Agent 5
+        "final_recommendations": [],                # will be filled by merge node
+        "error_log":             [],                # starts empty, errors added here
+        "total_budget":          total_budget,      # Upgrade 2: single budget value
     }
 
     # Step 2: Run through the graph (or fallback if LangGraph is not available)
