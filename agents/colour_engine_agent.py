@@ -508,3 +508,66 @@ def get_colour_names_for_search(hex_code):
     """
     _family, colour_names = hex_to_colour_family(hex_code)   # unpack the tuple
     return colour_names   # return just the list
+
+
+# =============================================================
+# FIX 1 — COLOUR FAMILY MAP
+# Maps the 6 family names to all colour names stored in the DB.
+# Used by the agent to build WHERE colour_family = ? queries.
+# =============================================================
+
+# A flat lookup: family name → list of colour text values in the DB
+COLOUR_FAMILY_MAP = {
+    "warm":    ["terracotta", "rust", "mustard yellow", "burnt orange",
+                "coral", "deep red", "crimson red", "amber", "peach"],
+    "cool":    ["cobalt blue", "emerald green", "teal blue", "royal blue",
+                "navy blue", "sky blue", "peacock blue", "sage green",
+                "deep purple", "forest green", "lavender purple"],
+    "neutral": ["ivory", "charcoal grey", "black", "white", "cream",
+                "beige", "off-white", "steel grey", "camel"],
+    "earth":   ["camel", "olive green", "caramel brown", "chocolate brown",
+                "khaki", "tan", "warm taupe"],
+    "pastel":  ["blush pink", "powder blue", "dusty rose", "mint green",
+                "lavender", "peach", "pale yellow"],
+    "jewel":   ["deep burgundy", "sapphire blue", "ruby red",
+                "amethyst purple", "jade green", "forest green"],
+}
+
+
+def get_search_colours_for_hex(hex_code):
+    """
+    FIX 1 — Main function used by the Wardrobe Architect's 5-tier query system.
+
+    Takes the user's chosen hex colour and returns:
+      - The colour_family name (matches the DB column directly)
+      - An ordered list of colour text names within that family
+
+    Example:
+      get_search_colours_for_hex('#8B0000')
+      → ('jewel', ['deep burgundy', 'sapphire blue', 'ruby red', ...])
+
+    This is what makes the DB query:
+      WHERE colour_family = 'jewel'
+    ... instead of the old broken:
+      WHERE colour = '#8B0000'
+
+    hex_code: string like '#8B0000' or '8B0000'
+    Returns: (family_name_string, [list_of_colour_strings])
+    """
+    family, colour_names = hex_to_colour_family(hex_code)   # get family + names
+
+    # Map the family name to the DB-compatible family key
+    # hex_to_colour_family returns some special keys like "white", "black"
+    # which are not DB family values — normalise them:
+    family_normalised = family   # start with what hex_to_colour_family returned
+
+    if family in ("white",):
+        family_normalised = "neutral"   # white is in the neutral family in the DB
+    elif family in ("black",):
+        family_normalised = "neutral"   # black is also in neutral
+    # all other family names already match the DB: warm/cool/earth/pastel/jewel
+
+    # Build the colour name list from the COLOUR_FAMILY_MAP for this family
+    db_colour_names = COLOUR_FAMILY_MAP.get(family_normalised, colour_names)
+
+    return family_normalised, db_colour_names

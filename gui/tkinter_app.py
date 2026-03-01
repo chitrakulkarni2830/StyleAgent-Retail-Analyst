@@ -431,7 +431,7 @@ class StyleAgentApp:
         self.root.resizable(True, True)
         self.root.minsize(1200, 750)
 
-        # State variables
+        self.gender_var         = tk.StringVar(value="Women")  # FIX 3: Women / Men
         self.selected_vibe      = tk.StringVar(value="Ethnic")
         self.selected_occasion  = tk.StringVar(value="Wedding Guest")
         self.selected_size      = tk.StringVar(value="M")
@@ -579,6 +579,40 @@ class StyleAgentApp:
             tk.Label(inner, text=text, font=FONTS["small"],
                      fg=COLOURS["text_secondary"],
                      bg=COLOURS["bg_secondary"]).pack(anchor="w", padx=16, pady=(10,2))
+
+        # ── FIX 3 — GENDER TOGGLE (👩 Women / 👨 Men) ──────────────
+        slbl("SHOPPING FOR")
+        gf = tk.Frame(inner, bg=COLOURS["bg_secondary"])
+        gf.pack(anchor="w", padx=16, pady=(0, 10))
+
+        def _select_gender(g, btns):
+            """Highlights the chosen gender button and dims the other."""
+            self.gender_var.set(g)   # update state variable
+            for gv, btn in btns.items():
+                if gv == g:
+                    btn.config(bg=COLOURS["darkbg_header"],
+                               fg=COLOURS["gold_primary"])   # active: dark + gold
+                else:
+                    btn.config(bg=COLOURS["bg_input"],
+                               fg=COLOURS["text_secondary"])  # inactive: light
+
+        _gender_btns = {}   # {"Women": btn_widget, "Men": btn_widget}
+        for gl, gv, default_active in [
+            ("👩  Women", "Women", True),
+            ("👨  Men",   "Men",   False),
+        ]:
+            btn = tk.Button(
+                gf, text=gl, font=("Segoe UI", 9, "bold"),
+                relief="flat", bd=0, padx=14, pady=7, cursor="hand2",
+                bg=COLOURS["darkbg_header"] if default_active else COLOURS["bg_input"],
+                fg=COLOURS["gold_primary"]   if default_active else COLOURS["text_secondary"],
+            )
+            btn.pack(side="left", padx=(0, 6))
+            _gender_btns[gv] = btn
+
+        # Wire each button's command after both buttons are created
+        for gv, btn in _gender_btns.items():
+            btn.config(command=lambda g=gv: _select_gender(g, _gender_btns))
 
         # Name
         slbl("YOUR NAME")
@@ -1108,6 +1142,7 @@ class StyleAgentApp:
             "size":              self.selected_size.get(),
             "occasion":          mapped_occ,
             "vibe":              self.selected_vibe.get(),
+            "gender":            self.gender_var.get(),        # FIX 3: Women / Men
             "favourite_colours": list(self.fav_colours) or ["#C67C5A"],
             "avoid_colours":     list(self.avoid_colours),
             "colour_harmony":    self.selected_harmony.get(),
@@ -1204,6 +1239,19 @@ class StyleAgentApp:
                      fg=COLOURS["text_secondary"],
                      bg=COLOURS["bg_card"]).pack(side="left", padx=(0,8))
 
+        # FIX 5 — Match transparency message banner
+        match_msg = outfit.get("match_message")
+        if match_msg:
+            notice = tk.Frame(card, bg="#FFFBF0",
+                              highlightthickness=1,
+                              highlightbackground=COLOURS["gold_primary"])
+            notice.pack(fill="x", padx=12, pady=(0, 6))
+            tk.Label(notice, text=match_msg,
+                     font=("Segoe UI", 8, "italic"),
+                     fg=COLOURS["gold_dark"], bg="#FFFBF0",
+                     padx=10, pady=5, anchor="w",
+                     wraplength=380, justify="left").pack(anchor="w")
+
         tk.Frame(card, bg=COLOURS["border_light"], height=1).pack(fill="x", padx=12, pady=2)
 
         # CLOTHING section
@@ -1229,11 +1277,36 @@ class StyleAgentApp:
             tk.Label(row, text=f"{name}  {price}", font=FONTS["small"],
                      fg=COLOURS["text_primary"], bg=COLOURS["bg_card"],
                      wraplength=240, justify="left", anchor="w").pack(side="left", fill="x")
-            # Shopping link (Upgrade 1)
-            link_url = item.get("shopping_link","")
-            source   = item.get("link_source","Google Shopping")
-            if link_url:
-                self._add_shopping_link(card, link_url, source)
+            # FIX 2 — Multi-link pill buttons (Google Shopping + Myntra + Ajio)
+            all_links = item.get("all_shopping_links", {})
+            # Backward compat: if new multi-link dict missing, use old single link
+            if not all_links:
+                single_url = item.get("shopping_link", "")
+                source     = item.get("link_source", "Google Shopping")
+                if single_url:
+                    all_links = {source: single_url}
+
+            if all_links:
+                pills_row = tk.Frame(card, bg=COLOURS["bg_card"])
+                pills_row.pack(anchor="w", padx=28, pady=(0, 4))
+                for site_name, url in list(all_links.items())[:3]:   # max 3 pills
+                    def _make_handler(u):
+                        return lambda e: webbrowser.open(u)   # capture URL in closure
+                    pill = tk.Label(
+                        pills_row,
+                        text=f"🛒 {site_name}",
+                        font=("Segoe UI", 8, "bold"),
+                        fg=COLOURS["gold_dark"],
+                        bg=COLOURS["gold_shimmer"],
+                        padx=8, pady=3,
+                        cursor="hand2",
+                    )
+                    pill.pack(side="left", padx=(0, 4))
+                    pill.bind("<Enter>", lambda e, p=pill: p.config(
+                        bg=COLOURS["gold_primary"], fg=COLOURS["bg_primary"]))
+                    pill.bind("<Leave>", lambda e, p=pill: p.config(
+                        bg=COLOURS["gold_shimmer"], fg=COLOURS["gold_dark"]))
+                    pill.bind("<Button-1>", _make_handler(url))
 
         tk.Frame(card, bg=COLOURS["border_light"], height=1).pack(fill="x", padx=12, pady=2)
 

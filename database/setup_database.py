@@ -92,27 +92,29 @@ def create_all_tables(connection):
     ''')
 
     # ── Table 4: current_inventory ────────────────────────────
-    # The full clothing catalogue — 50+ rows of outfits
+    # The full clothing catalogue — rebuilt programmatically (500+ items)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS current_inventory (
-            item_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_name         TEXT NOT NULL,                      -- full descriptive name
-            category          TEXT,                               -- Top / Bottom / Dress / Outerwear / Footwear / Bag
-            colour            TEXT,                               -- main colour
-            colour_hex        TEXT,                               -- HEX code e.g. #8B0000
-            fabric            TEXT,                               -- Silk / Cotton / Chiffon etc.
-            silhouette        TEXT,                               -- A-Line / Straight / Flared etc.
-            cut               TEXT,                               -- Anarkali / Crop / Wrap etc.
-            fit               TEXT,                               -- Regular / Slim / Relaxed etc.
-            vibe              TEXT,                               -- Ethnic / Modern / Boho etc.
-            size_available    TEXT,                               -- comma-separated: "S,M,L"
-            price             REAL,                               -- price in Indian Rupees
-            brand_tier        TEXT,                               -- Budget / Mid-range / Designer
-            occasion_tags     TEXT,                               -- comma-separated occasions
-            stock_count       INTEGER DEFAULT 10,
-            image_url         TEXT DEFAULT ""
+            item_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_name        TEXT NOT NULL,          -- full descriptive name
+            category         TEXT,                   -- lehenga / top / bottom / footwear / bag etc.
+            colour           TEXT,                   -- colour name e.g. "cobalt blue"
+            colour_hex       TEXT,                   -- HEX code e.g. "#1A5276"
+            colour_family    TEXT,                   -- warm / cool / neutral / earth / pastel / jewel
+            fabric           TEXT,                   -- Silk / Cotton / Georgette etc.
+            silhouette       TEXT,                   -- A-line / Flared / Straight etc.
+            size_available   TEXT,                   -- comma-separated: "XS,S,M,L,XL,XXL"
+            price            REAL,                   -- price in Indian Rupees
+            brand_tier       TEXT,                   -- budget / mid / premium
+            vibe_tags        TEXT,                   -- comma-separated: "ethnic,classic"
+            occasion_tags    TEXT,                   -- comma-separated: "wedding,sangeet,festive"
+            gender           TEXT DEFAULT "Women",   -- Women / Men / Unisex
+            formality_score  INTEGER DEFAULT 3,      -- 1 (very casual) to 5 (black tie)
+            stock_count      INTEGER DEFAULT 20,
+            image_url        TEXT DEFAULT ""
         )
     ''')
+
 
     # ── Table 5: jewellery_inventory ──────────────────────────
     # All jewellery pieces — 30+ rows
@@ -1151,28 +1153,590 @@ def seed_indian_ethnic_garments(connection):
           f"(lehengas, shararas, ghararas, anarkalis, sarees, indo-western sets)")
 
 
+
+# =============================================================
+# FIX 6 — DENSE INVENTORY GENERATOR
+# Generates 425+ items programmatically from templates.
+# This replaces all previous seed_inventory functions.
+# =============================================================
+
+def fabric_from_template(name_template):
+    """
+    Extracts or infers a fabric name from the item template name string.
+    Checks for fabric keywords and returns a sensible default if none match.
+    """
+    n = name_template.lower()   # lowercase the name for easy keyword checks
+    if "silk" in n:        return "silk"
+    if "georgette" in n:   return "georgette"
+    if "chiffon" in n:     return "chiffon"
+    if "cotton" in n:      return "cotton"
+    if "linen" in n:       return "linen"
+    if "velvet" in n:      return "velvet"
+    if "organza" in n:     return "organza"
+    if "crepe" in n:       return "crepe"
+    if "denim" in n:       return "denim"
+    if "leather" in n:     return "faux leather"
+    if "knit" in n:        return "rib-knit"
+    if "chanderi" in n:    return "chanderi"
+    if "chikankari" in n:  return "mul-cotton"
+    return "polyester-blend"   # safe default for anything not listed
+
+
+def generate_full_inventory(conn):
+    """
+    Generates 425+ inventory items programmatically using templates.
+    Each template is combined with 6 colour families to produce
+    multiple items automatically. This guarantees the database
+    is dense enough to always find a match for any user input.
+    """
+    import random   # for slight price variation between items
+    random.seed(42)   # fixed seed so the DB is the same every time we run
+
+    cursor = conn.cursor()   # cursor is the 'pen' for writing to the DB
+
+    # ── ITEM TEMPLATES ────────────────────────────────────────────────────────
+    # Each row: (name_template, category, silhouette, brand_tier,
+    #            vibe_tags, occasion_tags, gender, formality_score,
+    #            base_price, price_variance)
+    # {colour} is a placeholder replaced with each colour name below.
+
+    ITEM_TEMPLATES = [
+
+        # ══ WOMEN — INDIAN ETHNIC ═══════════════════════════════════════════
+        ("{colour} silk lehenga set — gold zari embroidery, choli, skirt, dupatta",
+         "lehenga", "flared lehenga", "premium",
+         "ethnic,classic", "wedding,sangeet,festive,diwali,reception",
+         "Women", 5, 7000, 3000),
+
+        ("{colour} georgette lehenga with resham thread work — 3-piece set",
+         "lehenga", "a-line lehenga", "mid",
+         "ethnic,indo-western", "sangeet,mehendi,festive,party",
+         "Women", 4, 4000, 2000),
+
+        ("{colour} organza lehenga with mirror embroidery — bridal ready",
+         "lehenga", "flared lehenga", "premium",
+         "ethnic,classic", "wedding,festive,reception",
+         "Women", 5, 9000, 4000),
+
+        ("{colour} cotton lehenga with block print — casual festive",
+         "lehenga", "a-line lehenga", "budget",
+         "ethnic,boho,casual", "mehendi,haldi,casual,navratri",
+         "Women", 3, 2000, 1000),
+
+        ("{colour} silk sharara set — straight kurta, wide sharara, organza dupatta",
+         "sharara", "wide-flared sharara", "mid",
+         "ethnic", "wedding,sangeet,festive,navratri,eid",
+         "Women", 4, 3500, 1500),
+
+        ("{colour} chiffon sharara with chikankari embroidery — ethereal drape",
+         "sharara", "wide-flared sharara", "mid",
+         "ethnic,indo-western", "mehendi,haldi,festive,casual",
+         "Women", 3, 2800, 1200),
+
+        ("{colour} georgette sharara with sequin border — party ready",
+         "sharara", "wide-flared sharara", "mid",
+         "ethnic", "sangeet,party,festive,navratri",
+         "Women", 4, 3200, 1000),
+
+        ("{colour} mul-cotton gharara with gota embroidery — Lucknowi style",
+         "gharara", "pleated gharara", "mid",
+         "ethnic", "mehendi,haldi,eid,festive,casual",
+         "Women", 3, 2200, 800),
+
+        ("{colour} chanderi gharara with block print — casual ethnic",
+         "gharara", "pleated gharara", "budget",
+         "ethnic,casual", "mehendi,pooja,casual,festive",
+         "Women", 2, 1600, 700),
+
+        ("{colour} floor-length Anarkali suit with dupatta — silk georgette",
+         "anarkali", "floor-length flared", "mid",
+         "ethnic,classic,indo-western", "wedding,sangeet,diwali,festive,formal dinner",
+         "Women", 4, 3200, 1500),
+
+        ("{colour} printed Anarkali with contrast palazzo — everyday ethnic",
+         "anarkali", "knee-length flared", "mid",
+         "ethnic,indo-western,casual", "office,festive,casual,brunch",
+         "Women", 2, 1800, 800),
+
+        ("{colour} cotton Anarkali with mirror embroidery — casual daily wear",
+         "anarkali", "knee-length flared", "budget",
+         "ethnic,casual", "pooja,casual,college,festive",
+         "Women", 2, 1200, 500),
+
+        ("{colour} straight-cut salwar suit — dupatta and churidar",
+         "salwar_suit", "straight cut", "mid",
+         "ethnic,classic", "office,pooja,casual,festive,mehendi",
+         "Women", 3, 2000, 800),
+
+        ("{colour} Kanjeevaram silk saree with gold zari border",
+         "saree", "6-yard drape", "premium",
+         "ethnic,classic,formal", "wedding,pooja,festive,formal dinner",
+         "Women", 5, 12000, 5000),
+
+        ("{colour} georgette saree with embroidered border and blouse",
+         "saree", "6-yard drape", "mid",
+         "ethnic,classic,formal", "office,wedding,festive,formal dinner",
+         "Women", 4, 2200, 1000),
+
+        ("{colour} Chanderi saree with block print — light summer festive",
+         "saree", "6-yard drape", "mid",
+         "ethnic,boho,casual", "pooja,festive,mehendi,casual brunch",
+         "Women", 3, 1800, 700),
+
+        ("{colour} cotton saree with contrast border — office appropriate",
+         "saree", "6-yard drape", "budget",
+         "ethnic,classic", "office,casual,pooja",
+         "Women", 3, 900, 400),
+
+        ("{colour} crop top and dhoti skirt set with heavy embroidery",
+         "dhoti_skirt", "dhoti drape skirt", "premium",
+         "indo-western,modern", "sangeet,party,date night,festive",
+         "Women", 4, 4500, 2000),
+
+        ("{colour} cape set — embroidered cape over straight trousers",
+         "cape_set", "cape and trouser", "premium",
+         "indo-western,modern,classic", "sangeet,wedding guest,formal,party",
+         "Women", 4, 5000, 2000),
+
+        # ══ WOMEN — WESTERN / MODERN ══════════════════════════════════════
+        ("{colour} cotton poplin shirt — relaxed collar and cuffs",
+         "top", "relaxed fit shirt", "budget",
+         "modern,classic,formal,casual", "office,interview,casual,brunch",
+         "Women", 2, 700, 300),
+
+        ("{colour} fitted turtleneck top — ribbed knit",
+         "top", "fitted", "budget",
+         "modern,classic,streetwear", "office,date night,party,casual",
+         "Women", 2, 900, 400),
+
+        ("{colour} chiffon flowy blouse with tie detail",
+         "top", "flowy", "mid",
+         "modern,boho,casual", "brunch,date night,party,casual",
+         "Women", 3, 1200, 500),
+
+        ("{colour} structured peplum top",
+         "top", "peplum", "mid",
+         "modern,formal,classic", "office,interview,formal dinner,party",
+         "Women", 3, 1400, 600),
+
+        ("{colour} crop top with square neckline",
+         "top", "cropped", "mid",
+         "modern,casual,streetwear", "brunch,party,casual,date night",
+         "Women", 2, 800, 400),
+
+        ("{colour} wide-leg crepe trousers — high waist",
+         "bottom", "wide-leg trouser", "mid",
+         "modern,formal,classic", "office,formal,party,casual",
+         "Women", 3, 1200, 500),
+
+        ("{colour} cigarette trousers — tailored slim",
+         "bottom", "cigarette trouser", "mid",
+         "modern,formal,classic", "office,interview,networking,formal dinner",
+         "Women", 4, 1500, 600),
+
+        ("{colour} A-line midi skirt — polyester blend",
+         "bottom", "midi a-line skirt", "mid",
+         "modern,classic,boho", "office,date night,brunch,casual",
+         "Women", 3, 1100, 500),
+
+        ("{colour} wide-leg palazzo — flowing drape",
+         "bottom", "palazzo", "mid",
+         "modern,casual,ethnic,boho", "office,casual,festive,travel",
+         "Women", 2, 900, 400),
+
+        ("{colour} linen straight-cut trousers",
+         "bottom", "straight cut trouser", "budget",
+         "modern,casual,formal,boho", "office,brunch,casual,travel",
+         "Women", 3, 1100, 400),
+
+        ("{colour} wrap dress — midi length crepe",
+         "top_or_dress", "midi wrap dress", "mid",
+         "modern,classic", "office,client meeting,birthday party,date night",
+         "Women", 3, 1800, 800),
+
+        ("{colour} shift dress — knee length",
+         "top_or_dress", "shift dress", "mid",
+         "modern,casual,formal", "brunch,birthday party,casual,date night",
+         "Women", 3, 1600, 700),
+
+        ("{colour} blazer dress — single button",
+         "top_or_dress", "blazer dress", "mid",
+         "modern,formal,classic", "office,conference,networking,formal dinner",
+         "Women", 4, 2500, 1000),
+
+        ("{colour} maxi dress with smocking detail",
+         "top_or_dress", "maxi dress", "mid",
+         "boho,casual,modern", "brunch,shopping trip,travel,casual,date night",
+         "Women", 2, 1600, 700),
+
+        ("{colour} structured blazer — notch lapel",
+         "outerwear", "tailored blazer", "mid",
+         "modern,formal,classic", "office,interview,conference,formal dinner",
+         "Women", 4, 2500, 1000),
+
+        ("{colour} oversized linen blazer — casual",
+         "outerwear", "oversized blazer", "mid",
+         "modern,casual,boho", "brunch,casual,shopping trip,travel",
+         "Women", 2, 2000, 800),
+
+        ("{colour} organza dupatta with gold border",
+         "outerwear", "dupatta", "mid",
+         "ethnic,indo-western,classic", "wedding,festive,formal,pooja",
+         "Women", 4, 600, 300),
+
+        ("{colour} chiffon dupatta with silver threadwork",
+         "outerwear", "dupatta", "mid",
+         "ethnic,indo-western", "mehendi,sangeet,festive,casual",
+         "Women", 3, 500, 250),
+
+        # ══ WOMEN — FOOTWEAR ════════════════════════════════════════════════
+        ("{colour} block-heel sandals — 3 inch",
+         "footwear", "block heel sandal", "mid",
+         "ethnic,indo-western,classic,modern", "wedding,festive,party,date night",
+         "Women", 4, 1400, 600),
+
+        ("{colour} pointed-toe kitten heels — 2 inch",
+         "footwear", "kitten heel", "mid",
+         "modern,formal,classic", "office,interview,formal dinner,networking",
+         "Women", 4, 1600, 700),
+
+        ("{colour} block-heel ankle boots",
+         "footwear", "ankle boot", "mid",
+         "modern,formal,streetwear,classic", "office,date night,party,casual",
+         "Women", 3, 2200, 900),
+
+        ("{colour} flat strappy sandals",
+         "footwear", "flat sandal", "budget",
+         "casual,boho,ethnic,indo-western", "casual,mehendi,brunch,shopping trip",
+         "Women", 1, 700, 300),
+
+        ("{colour} chunky sneakers",
+         "footwear", "flatform sneaker", "mid",
+         "casual,streetwear,modern", "shopping trip,brunch,travel,casual,college",
+         "Women", 1, 1800, 700),
+
+        ("{colour} kolhapuri flats — handcrafted leather",
+         "footwear", "kolhapuri flat", "budget",
+         "ethnic,boho,casual,indo-western", "casual,mehendi,pooja,shopping trip",
+         "Women", 2, 800, 300),
+
+        ("{colour} heeled mules — square toe",
+         "footwear", "mule heel", "mid",
+         "modern,casual,boho", "brunch,casual,date night,shopping trip",
+         "Women", 2, 1500, 600),
+
+        # ══ WOMEN — BAGS ════════════════════════════════════════════════════
+        ("{colour} potli bag with gold embroidery",
+         "bag", "potli", "mid",
+         "ethnic,indo-western,classic", "wedding,festive,party,sangeet",
+         "Women", 4, 600, 300),
+
+        ("{colour} structured tote bag — faux leather",
+         "bag", "tote", "mid",
+         "modern,formal,classic", "office,interview,conference,casual",
+         "Women", 3, 1500, 600),
+
+        ("{colour} mini crossbody bag — chain strap",
+         "bag", "crossbody", "mid",
+         "modern,casual,classic,formal", "office,brunch,date night,party",
+         "Women", 3, 1200, 500),
+
+        ("{colour} envelope clutch — faux leather",
+         "bag", "clutch", "mid",
+         "modern,ethnic,classic,indo-western",
+         "party,wedding,date night,festive,formal dinner",
+         "Women", 4, 850, 400),
+
+        ("{colour} woven straw tote",
+         "bag", "tote", "budget",
+         "boho,casual,modern", "brunch,shopping trip,travel,casual",
+         "Women", 1, 900, 400),
+
+        # ══ MEN — INDIAN ETHNIC ════════════════════════════════════════════
+        ("{colour} kurta pyjama set — straight cut, mandarin collar",
+         "kurta_pyjama", "straight kurta", "mid",
+         "ethnic,classic,casual",
+         "wedding,sangeet,pooja,diwali,eid,festive,casual",
+         "Men", 3, 2200, 1000),
+
+        ("{colour} silk kurta pyjama — heavy embroidery for weddings",
+         "kurta_pyjama", "straight kurta", "premium",
+         "ethnic,classic", "wedding,sangeet,festive",
+         "Men", 5, 5000, 2500),
+
+        ("{colour} cotton pathani suit — full length",
+         "kurta_pyjama", "pathani full", "mid",
+         "ethnic,classic", "eid,pooja,casual,festive",
+         "Men", 3, 2800, 1200),
+
+        ("{colour} Nehru jacket — wear over white kurta for indo-western",
+         "nehru_jacket", "nehru jacket", "mid",
+         "indo-western,ethnic,classic",
+         "wedding,sangeet,festive,formal dinner",
+         "Men", 4, 3500, 1500),
+
+        ("{colour} bandhgala suit — Jodhpuri style",
+         "bandhgala", "jodhpuri bandhgala", "premium",
+         "ethnic,classic,formal",
+         "wedding,sangeet,formal dinner,award ceremony",
+         "Men", 5, 7000, 3000),
+
+        ("{colour} sherwani with churidar — embroidered collar and cuffs",
+         "sherwani", "sherwani full", "premium",
+         "ethnic,classic", "wedding,festive",
+         "Men", 5, 10000, 5000),
+
+        # ══ MEN — WESTERN / MODERN ═════════════════════════════════════════
+        ("{colour} formal dress shirt — slim fit Oxford",
+         "top", "slim fit shirt", "mid",
+         "modern,formal,classic",
+         "office,interview,conference,formal dinner,networking",
+         "Men", 4, 900, 400),
+
+        ("{colour} linen shirt — relaxed fit, casual",
+         "top", "relaxed linen shirt", "mid",
+         "modern,casual,boho", "brunch,casual,travel,shopping trip",
+         "Men", 2, 1200, 500),
+
+        ("{colour} structured blazer — two button",
+         "outerwear", "two-button blazer", "mid",
+         "modern,formal,classic",
+         "office,interview,conference,formal dinner",
+         "Men", 4, 3000, 1200),
+
+        ("{colour} chino trousers — slim tapered",
+         "bottom", "slim chino", "mid",
+         "modern,casual,formal",
+         "office,casual,brunch,networking,date night",
+         "Men", 3, 1400, 600),
+
+        ("{colour} formal trousers — flat front",
+         "bottom", "flat front trouser", "mid",
+         "modern,formal,classic",
+         "office,interview,conference,formal dinner",
+         "Men", 4, 1600, 700),
+
+        ("{colour} slim jeans — dark wash",
+         "bottom", "slim straight jeans", "mid",
+         "casual,modern,streetwear",
+         "casual,brunch,date night,party,college",
+         "Men", 2, 1500, 600),
+
+        # ══ MEN — FOOTWEAR ══════════════════════════════════════════════════
+        ("{colour} leather Oxford shoes — formal",
+         "footwear", "oxford formal", "mid",
+         "modern,formal,classic",
+         "office,interview,wedding,formal dinner",
+         "Men", 5, 2500, 1000),
+
+        ("{colour} loafers — penny strap",
+         "footwear", "penny loafer", "mid",
+         "modern,casual,classic", "office,brunch,casual,date night",
+         "Men", 3, 2000, 800),
+
+        ("{colour} leather kolhapuri chappals — ethnic",
+         "footwear", "kolhapuri flat", "budget",
+         "ethnic,casual,boho", "casual,pooja,mehendi,festive",
+         "Men", 2, 600, 300),
+
+        ("{colour} white sneakers — low top clean",
+         "footwear", "low sneaker", "mid",
+         "casual,modern,streetwear",
+         "casual,college,brunch,shopping trip",
+         "Men", 1, 1800, 700),
+
+        ("{colour} mojari — embroidered ethnic shoes",
+         "footwear", "mojari", "mid",
+         "ethnic,indo-western,classic", "wedding,sangeet,festive,pooja",
+         "Men", 4, 1200, 500),
+
+        # ══ MEN — BAGS ══════════════════════════════════════════════════════
+        ("{colour} leather belt — pin buckle",
+         "bag", "belt", "mid",
+         "modern,formal,classic,casual",
+         "office,interview,casual,formal dinner",
+         "Men", 3, 800, 300),
+
+        ("{colour} potli / jhola bag — cotton",
+         "bag", "jhola bag", "budget",
+         "ethnic,boho,casual", "festive,casual,travel,shopping trip",
+         "Men", 2, 400, 200),
+
+        ("{colour} formal messenger bag — faux leather",
+         "bag", "messenger bag", "mid",
+         "modern,formal", "office,conference,networking",
+         "Men", 3, 1800, 700),
+
+        # ══ UNISEX ══════════════════════════════════════════════════════════
+        ("{colour} oversized denim jacket",
+         "outerwear", "oversized jacket", "mid",
+         "casual,streetwear,modern",
+         "casual,travel,shopping trip,brunch,college",
+         "Unisex", 1, 2000, 800),
+
+        ("{colour} trench coat — belted midi length",
+         "outerwear", "trench coat", "mid",
+         "modern,classic,formal", "office,formal dinner,casual,travel",
+         "Unisex", 4, 3500, 1500),
+    ]
+
+    # ── COLOUR FAMILIES ───────────────────────────────────────────────────────
+    # Each family has one representative colour that will be used for templates.
+    # The agent uses colour_family for fuzzy matching so exact shades vary.
+    COLOUR_FAMILIES = [
+        # (family_name, colour_name, colour_hex)
+        ("warm",    "terracotta",       "#C07A5A"),
+        ("warm",    "rust",             "#B5451B"),
+        ("warm",    "mustard yellow",   "#D4A017"),
+        ("cool",    "cobalt blue",      "#1A5276"),
+        ("cool",    "emerald green",    "#1E8449"),
+        ("cool",    "teal blue",        "#008080"),
+        ("neutral", "ivory",            "#FFFFF0"),
+        ("neutral", "charcoal grey",    "#36454F"),
+        ("neutral", "black",            "#1A1A1A"),
+        ("earth",   "camel",            "#C19A6B"),
+        ("earth",   "olive green",      "#556B2F"),
+        ("pastel",  "blush pink",       "#FFB6C1"),
+        ("pastel",  "powder blue",      "#B0D0E8"),
+        ("pastel",  "dusty rose",       "#DCAE96"),
+        ("jewel",   "deep burgundy",    "#800020"),
+        ("jewel",   "sapphire blue",    "#0F52BA"),
+        ("jewel",   "ruby red",         "#9B1B30"),
+    ]
+
+    # ── GENERATE ALL ITEMS ────────────────────────────────────────────────────
+    all_items = []   # list to collect every generated item tuple
+
+    for template in ITEM_TEMPLATES:
+        (name_tpl, category, silhouette, brand_tier,
+         vibe_tags, occasion_tags, gender, formality_score,
+         base_price, price_variance) = template
+
+        # Combine each template with each colour family
+        for family_name, colour_name, colour_hex in COLOUR_FAMILIES:
+
+            # Skip obviously mismatched combinations
+            # (e.g., don't put 'blush pink' on men's formal trousers)
+            if gender == "Men" and family_name == "pastel" and formality_score >= 4:
+                continue   # skip pastel formal men's — not a realistic match
+
+            # Slightly vary the price so not all items cost exactly the same
+            actual_price = base_price + random.randint(0, price_variance)
+
+            # Fill in the colour placeholder in the name template
+            item_name = name_tpl.replace("{colour}", colour_name.capitalize())
+
+            # Infer fabric from the item name
+            fabric = fabric_from_template(name_tpl)
+
+            # Build the sizes string depending on gender
+            if gender == "Women":
+                sizes = "XS,S,M,L,XL,XXL"
+            elif gender == "Men":
+                sizes = "S,M,L,XL,XXL"
+            else:
+                sizes = "XS,S,M,L,XL,XXL"   # Unisex
+
+            # Full item tuple — matches INSERT column order below
+            item = (
+                item_name,        # item_name
+                category,         # category
+                colour_name,      # colour (text name)
+                colour_hex,       # colour_hex
+                family_name,      # colour_family
+                fabric,           # fabric
+                silhouette,       # silhouette
+                sizes,            # size_available
+                actual_price,     # price
+                brand_tier,       # brand_tier
+                vibe_tags,        # vibe_tags
+                occasion_tags,    # occasion_tags
+                gender,           # gender
+                formality_score,  # formality_score
+                20,               # stock_count
+                "",               # image_url (empty — filled later by scraper)
+            )
+            all_items.append(item)
+
+    # ── SPECIFIC HIGH-PRIORITY ITEMS ─────────────────────────────────────────
+    # These exact items fill the most common search: Ethnic + Wedding
+    PRIORITY_ITEMS = [
+        ("Crimson red Banarasi silk lehenga — gold zari weave, bridal quality, 3-piece",
+         "lehenga", "crimson red", "#C0392B", "jewel", "banarasi silk",
+         "flared lehenga", "XS,S,M,L,XL", 12000, "premium",
+         "ethnic,classic", "wedding,festive,reception", "Women", 5, 10, ""),
+
+        ("Royal blue Kanjeevaram silk saree — temple border, with unstitched blouse",
+         "saree", "royal blue", "#2471A3", "cool", "kanjeevaram silk",
+         "6-yard drape", "free size", 8000, "premium",
+         "ethnic,classic,formal", "wedding,pooja,festive,formal dinner",
+         "Women", 5, 8, ""),
+
+        ("Ivory raw silk sherwani — gold zari collar and cuffs, full length",
+         "sherwani", "ivory", "#FFFFF0", "neutral", "raw silk",
+         "sherwani full", "S,M,L,XL,XXL", 9000, "premium",
+         "ethnic,classic", "wedding,festive", "Men", 5, 6, ""),
+
+        ("Dusty rose organza lehenga — subtle mirror work, perfect wedding guest",
+         "lehenga", "dusty rose", "#DCAE96", "pastel", "organza",
+         "a-line lehenga", "XS,S,M,L,XL,XXL", 5500, "mid",
+         "ethnic,indo-western", "wedding,sangeet,festive", "Women", 4, 12, ""),
+
+        ("Sage green bandhani sharara set — cotton silk, summer festive",
+         "sharara", "sage green", "#8FAF8B", "cool", "cotton silk",
+         "wide-flared sharara", "XS,S,M,L,XL,XXL", 2800, "mid",
+         "ethnic,indo-western", "mehendi,haldi,festive,navratri",
+         "Women", 3, 15, ""),
+    ]
+
+    # ── INSERT EVERYTHING INTO THE DATABASE ───────────────────────────────────
+    # INSERT OR IGNORE means this function is safe to run multiple times
+    cursor.executemany("""
+        INSERT OR IGNORE INTO current_inventory
+        (item_name, category, colour, colour_hex, colour_family, fabric, silhouette,
+         size_available, price, brand_tier, vibe_tags, occasion_tags, gender,
+         formality_score, stock_count, image_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, PRIORITY_ITEMS)   # priority items first — inserted at lower item_id
+
+    cursor.executemany("""
+        INSERT OR IGNORE INTO current_inventory
+        (item_name, category, colour, colour_hex, colour_family, fabric, silhouette,
+         size_available, price, brand_tier, vibe_tags, occasion_tags, gender,
+         formality_score, stock_count, image_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, all_items)   # then the 420+ generated items
+
+    conn.commit()   # save all inserts to disk
+    total = len(PRIORITY_ITEMS) + len(all_items)
+    print(f"  ✅ Generated and inserted {total} inventory items.")
+    print(f"     Covers: all genders, all vibes, 17 colours, all occasion tiers.")
+
+
 # =============================================================
 # MAIN — runs when you type: python3 database/setup_database.py
 # =============================================================
 if __name__ == "__main__":
-    print("\n" + "=" * 55)
-    print("  Style Agent — Database Setup")
-    print("=" * 55)
+    print("\n" + "=" * 60)
+    print("  Style Agent v5 — Database Setup")
+    print("=" * 60)
 
     # Create (or open) the database file
     connection = sqlite3.connect(DB_PATH)
 
-    # Run all our setup functions in order
+    # Step 1: Create all table structures
     create_all_tables(connection)
-    seed_inventory(connection)
-    seed_inventory_with_full_coverage(connection)  # existing: broad coverage items
-    seed_indian_ethnic_garments(connection)         # NEW: proper Indian garment types
+
+    # Step 2: Generate 425+ programmatic inventory items (Fix 6)
+    generate_full_inventory(connection)
+
+    # Step 3: Seed jewellery and user data (unchanged)
     seed_jewellery(connection)
     seed_user_data(connection)
 
     # Always close the connection when done
     connection.close()
 
-    print("=" * 55)
+    print("=" * 60)
     print(f"  ✅ Database ready at: {DB_PATH}")
-    print("=" * 55 + "\n")
+    print("=" * 60 + "\n")

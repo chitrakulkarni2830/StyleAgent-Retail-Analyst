@@ -41,16 +41,90 @@ except ImportError:
     print("  ⚠️  LiveLinkScraper not found — shopping links will be skipped")
 
 # ── Import colour-family helper (Fix 1) ───────────────────────
-# Converts any hex code like #FF6B35 into a list of colour names
-# we can search for in the database (e.g. ["rust","terracotta","coral"])
+# get_search_colours_for_hex: converts a hex code to (family, colour_names)
+# used by the 5-tier get_inventory_items query system
 try:
-    from agents.colour_engine_agent import get_colour_names_for_search
+    from agents.colour_engine_agent import (
+        get_colour_names_for_search,
+        get_search_colours_for_hex,   # FIX 1 — returns (family, names) tuple
+    )
     COLOUR_SEARCH_AVAILABLE = True
 except ImportError:
     # If import fails, fall back to no colour matching
     def get_colour_names_for_search(hex_code):
         return []   # empty list = no colour preference used
+    def get_search_colours_for_hex(hex_code):
+        return "neutral", []   # neutral family = safe fallback
     COLOUR_SEARCH_AVAILABLE = False
+
+
+# =============================================================
+# FIX 7 — FORMALITY SCORING
+# Maps every supported occasion to a formality score 1-5.
+# This is used to pick correctly dressed items from the DB.
+# 1 = very casual, 5 = black tie formal
+# =============================================================
+OCCASION_FORMALITY = {
+    # Indian formal (5)
+    "wedding":             5,
+    "black tie gala":      5,
+    "award ceremony":      5,
+    "sherwani occasion":   5,
+    # Indian semi-formal / party (4)
+    "sangeet":             4,
+    "formal dinner":       4,
+    "reception":           4,
+    "theatre":             4,
+    "opera":               4,
+    "conference":          4,
+    "client meeting":      4,
+    "job interview":       4,
+    "interview":           4,
+    "anniversary dinner":  4,
+    "date night":          4,
+    "first date":          4,
+    "girls night out":     4,
+    # Mid-level / festive (3)
+    "mehendi":             3,
+    "diwali":              3,
+    "eid":                 3,
+    "durga puja":          3,
+    "navratri":            3,
+    "festival mela":       3,
+    "birthday party":      3,
+    "house party":         3,
+    "farewell":            3,
+    "networking event":    3,
+    "business lunch":      3,
+    "office":              3,
+    # Casual (2)
+    "haldi":               2,
+    "pooja":               2,
+    "brunch":              2,
+    "movie date":          2,
+    "shopping trip":       2,
+    "sunday outing":       2,
+    "college":             2,
+    # Very casual (1)
+    "work from home":      1,
+    "travel":              1,
+    "grocery":             1,
+}
+
+
+# =============================================================
+# FIX 5 — MATCH TRANSPARENCY MESSAGES
+# Shown in the result card when the agent had to loosen its
+# search criteria to find a match.
+# Tier 1 = perfect → show nothing. Tier 5 = last resort.
+# =============================================================
+TIER_MESSAGES = {
+    1: None,   # perfect match — show nothing
+    2: "✓ Closest match — outfit vibe adjusted to fit your occasion",
+    3: "✓ Colour family matched — exact shade unavailable in this vibe",
+    4: "⚠ No colour match in budget — showing best formality fit",
+    5: "⚠ Limited results — showing best available within your budget",
+}
 
 
 # =============================================================
@@ -657,3 +731,328 @@ class WardrobeArchitectAgent:
         conn.close()   # close the database connection when all outfits are built
         print(f"  ✅ All 3 outfits ready!")
         return outfits   # return the list of 3 enriched outfit dicts
+
+    # ─────────────────────────────────────────────────────────
+    # FIX 1 — 5-TIER INVENTORY QUERY (colour_family matching)
+    # ─────────────────────────────────────────────────────────
+    def get_inventory_items(self, conn, category, user_hex, vibe, occasion,
+                            max_price, gender="Women", target_formality=3):
+        """
+        Finds matching inventory items using a 5-tier fallback system.
+        Each tier is slightly looser than the last.
+        This guarantees the user ALWAYS gets outfit results.
+
+        Tier 1: colour_family + vibe + occasion + gender + formality ±1  (strictest)
+        Tier 2: colour_family + vibe + gender           (drop occasion)
+        Tier 3: colour_family + gender                  (drop vibe)
+        Tier 4: gender + formality + price              (drop colour)
+        Tier 5: gender + price only                     (last resort)
+
+        Returns: (list_of_row_dicts, matched_tier_int, colour_family_str)
+        """
+        cursor = conn.cursor()
+
+        # Convert the user's hex code to a colour family name and colour list
+        colour_family, colour_names = get_search_colours_for_hex(user_hex)
+
+        matched_tier = 5   # default to last resort; updated as tiers succeed
+
+        vibe_lower     = vibe.lower()        # e.g. "ethnic"
+        occasion_lower = occasion.lower()    # e.g. "wedding"
+
+        # ── Tier 1: strictest — all 5 criteria ──────────────────────────────
+        cursor.execute("""
+            SELECT * FROM current_inventory
+            WHERE category = ?
+              AND colour_family = ?
+              AND LOWER(vibe_tags) LIKE ?
+              AND LOWER(occasion_tags) LIKE ?
+              AND (gender = ? OR gender = 'Unisex')
+              AND formality_score BETWEEN ? AND ?
+              AND price <= ?
+              AND stock_count > 0
+            ORDER BY price DESC
+            LIMIT 8
+        """, (category, colour_family,
+              f"%{vibe_lower}%",
+              f"%{occasion_lower.split('/')[0].strip()}%",
+              gender,
+              max(1, target_formality - 1),   # allow 1 step below target
+              min(5, target_formality + 1),   # allow 1 step above target
+              max_price))
+        results = cursor.fetchall()
+        if results:
+            return results, 1, colour_family
+
+        # ── Tier 2: drop occasion ────────────────────────────────────────────
+        cursor.execute("""
+            SELECT * FROM current_inventory
+            WHERE category = ?
+              AND colour_family = ?
+              AND LOWER(vibe_tags) LIKE ?
+              AND (gender = ? OR gender = 'Unisex')
+              AND price <= ?
+              AND stock_count > 0
+            ORDER BY formality_score DESC
+            LIMIT 8
+        """, (category, colour_family, f"%{vibe_lower}%", gender, max_price))
+        results = cursor.fetchall()
+        if results:
+            return results, 2, colour_family
+
+        # ── Tier 3: drop vibe, keep colour family + gender ───────────────────
+        cursor.execute("""
+            SELECT * FROM current_inventory
+            WHERE category = ?
+              AND colour_family = ?
+              AND (gender = ? OR gender = 'Unisex')
+              AND price <= ?
+              AND stock_count > 0
+            ORDER BY formality_score DESC
+            LIMIT 8
+        """, (category, colour_family, gender, max_price))
+        results = cursor.fetchall()
+        if results:
+            return results, 3, colour_family
+
+        # ── Tier 4: drop colour, keep gender + formality ─────────────────────
+        cursor.execute("""
+            SELECT * FROM current_inventory
+            WHERE category = ?
+              AND (gender = ? OR gender = 'Unisex')
+              AND formality_score BETWEEN ? AND ?
+              AND price <= ?
+              AND stock_count > 0
+            ORDER BY RANDOM()
+            LIMIT 8
+        """, (category, gender,
+              max(1, target_formality - 1),
+              min(5, target_formality + 1),
+              max_price))
+        results = cursor.fetchall()
+        if results:
+            return results, 4, colour_family
+
+        # ── Tier 5: absolute last resort — just gender + price ───────────────
+        cursor.execute("""
+            SELECT * FROM current_inventory
+            WHERE category = ?
+              AND (gender = ? OR gender = 'Unisex')
+              AND price <= ?
+              AND stock_count > 0
+            ORDER BY RANDOM()
+            LIMIT 8
+        """, (category, gender, max_price))
+        results = cursor.fetchall()
+        return results, 5, colour_family   # always return even if empty
+
+    # ─────────────────────────────────────────────────────────
+    # FIX 7 — FORMALITY SCORING
+    # ─────────────────────────────────────────────────────────
+    @staticmethod
+    def get_formality_for_occasion(occasion_text):
+        """
+        Returns the formality score (1-5) for a given occasion string.
+        Uses partial keyword matching so "Wedding Guest" matches "wedding".
+
+        occasion_text: any occasion string the user typed
+        Returns: int 1-5 (default 3 if no keyword matched)
+        """
+        occasion_lower = occasion_text.lower()   # lowercase for comparison
+
+        # Check each known keyword against the user's occasion text
+        for keyword, score in OCCASION_FORMALITY.items():
+            if keyword in occasion_lower:
+                return score   # return as soon as we find a match
+
+        return 3   # default: mid-level if no keyword matched
+
+    # ─────────────────────────────────────────────────────────
+    # FIX 3 — GENDER-AWARE CATEGORY ROUTING
+    # ─────────────────────────────────────────────────────────
+    def get_outfit_categories_for_gender_vibe_occasion(self, gender, vibe, occasion):
+        """
+        Returns the ordered list of DB categories to search for,
+        based on gender + vibe + occasion.
+
+        Women Ethnic + Wedding → [lehenga, saree, sharara, anarkali]
+        Men Ethnic + Wedding   → [sherwani, bandhgala, kurta_pyjama, nehru_jacket]
+        Women Modern           → [top_or_dress, top, bottom]
+        Men Modern             → [top, bottom, outerwear]
+
+        gender:  "Women" or "Men"
+        vibe:    e.g. "Ethnic" or "Modern"
+        occasion: e.g. "Wedding Guest" or "Office"
+        Returns: list of category strings (ordered, first = most preferred)
+        """
+        g   = gender.lower()    # "women" or "men"
+        v   = vibe.lower()      # "ethnic", "modern" etc.
+        occ = occasion.lower()  # "wedding", "office" etc.
+
+        # ── WOMEN ────────────────────────────────────────────────────────────
+        if g == "women":
+            if v == "ethnic":
+                if any(w in occ for w in ["wedding", "sangeet", "reception", "gala"]):
+                    return ["lehenga", "saree", "sharara", "anarkali"]
+                elif any(w in occ for w in ["mehendi", "haldi", "navratri", "eid"]):
+                    return ["sharara", "gharara", "anarkali", "lehenga", "salwar_suit"]
+                else:
+                    return ["salwar_suit", "anarkali", "saree", "lehenga"]
+            elif "indo" in v:
+                return ["dhoti_skirt", "cape_set", "anarkali", "salwar_suit"]
+            else:
+                return ["top_or_dress", "top", "bottom"]   # modern / casual / boho etc.
+
+        # ── MEN ──────────────────────────────────────────────────────────────
+        elif g == "men":
+            if v == "ethnic":
+                if any(w in occ for w in ["wedding", "sangeet", "reception", "gala"]):
+                    return ["sherwani", "bandhgala", "kurta_pyjama", "nehru_jacket"]
+                elif any(w in occ for w in ["pooja", "diwali", "eid", "casual"]):
+                    return ["kurta_pyjama", "nehru_jacket"]
+                else:
+                    return ["kurta_pyjama", "sherwani", "bandhgala"]
+            elif "indo" in v:
+                return ["nehru_jacket", "bandhgala", "kurta_pyjama"]
+            else:
+                return ["top", "bottom", "outerwear"]   # shirt + trouser + blazer
+
+        # ── FALLBACK ─────────────────────────────────────────────────────────
+        return ["top", "bottom", "outerwear"]   # safe default
+
+    # ─────────────────────────────────────────────────────────
+    # FIX 5 — MATCH TRANSPARENCY MESSAGE BUILDER
+    # ─────────────────────────────────────────────────────────
+    @staticmethod
+    def build_match_message(tier, user_hex, colour_family, vibe, occasion):
+        """
+        Builds a human-readable message explaining how the outfit was matched.
+        Shown in the result card so the user understands any substitutions.
+
+        tier:          int 1-5 from get_inventory_items()
+        user_hex:      the hex the user picked e.g. "#8B0000"
+        colour_family: e.g. "jewel"
+        vibe:          e.g. "Ethnic"
+        occasion:      e.g. "Wedding Guest"
+        Returns: string message, or None if perfect match (tier 1)
+        """
+        base_message = TIER_MESSAGES.get(tier)   # look up the message for this tier
+
+        if base_message is None:
+            return None   # tier 1 = perfect match, show nothing
+
+        # For tiers 3 and 4, add colour context to explain the substitution
+        if tier in [3, 4]:
+            detail = (
+                f" Your chosen colour ({user_hex}) is in the "
+                f"'{colour_family}' family — showing best '{colour_family}' "
+                f"alternatives available."
+            )
+            return base_message + detail
+
+        return base_message   # tiers 2 and 5 use the message as-is
+
+
+# =============================================================
+# FIX 4 — OUTFIT COHERENCE VALIDATOR
+# Standalone class — call validator.validate(outfit, formality)
+# after WardrobeArchitectAgent builds an outfit.
+# =============================================================
+class OutfitCoherenceValidator:
+    """
+    Checks whether the pieces in a recommended outfit make sense together.
+    Prevents mismatches like: heavy bridal lehenga + casual flat sneakers.
+
+    Checks:
+    1. Footwear formality (block heels for weddings, sneakers for casual)
+    2. Bag type formality (clutch for formal, tote for casual)
+    3. Dupatta presence for ethnic outfits
+    """
+
+    # What footwear silhouettes are appropriate at each formality level
+    FOOTWEAR_FORMALITY_RULES = {
+        5: ["block heel sandal", "stiletto", "kitten heel", "oxford formal",
+            "mojari", "kolhapuri flat"],             # formal: heels or dressy flats
+        4: ["block heel sandal", "kitten heel", "oxford formal", "penny loafer",
+            "mule heel", "heeled sandal", "mojari"],
+        3: ["kitten heel", "mule heel", "flat sandal", "penny loafer",
+            "block heel sandal", "kolhapuri flat", "loafer"],
+        2: ["flat sandal", "kolhapuri flat", "penny loafer", "low sneaker",
+            "mule heel", "flat boot"],
+        1: ["low sneaker", "flat sandal", "kolhapuri flat",
+            "chunky sneaker", "flatform sneaker"],
+    }
+
+    # What bag silhouettes are appropriate at each formality level
+    BAG_FORMALITY_RULES = {
+        5: ["potli", "clutch", "envelope clutch"],
+        4: ["clutch", "potli", "crossbody"],
+        3: ["crossbody", "tote", "clutch", "potli", "jhola bag"],
+        2: ["tote", "crossbody", "woven tote", "jhola bag"],
+        1: ["tote", "crossbody", "jhola bag"],
+    }
+
+    # Categories that are Indian ethnic and should always have a dupatta
+    ETHNIC_CATEGORIES_NEEDING_DUPATTA = {
+        "lehenga", "sharara", "gharara", "salwar_suit"
+    }
+
+    def validate(self, outfit_dict, target_formality):
+        """
+        Checks an outfit dict for coherence issues.
+        Returns: (is_valid_bool, list_of_issue_strings, outfit_dict)
+
+        The outfit_dict is returned unchanged — this validator only reports,
+        it does not modify the outfit (the agent can re-query if needed).
+        """
+        issues = []   # collect any problems found
+
+        # ── Check 1: footwear formality ──────────────────────────────────────
+        footwear = outfit_dict.get("footwear")
+        if footwear and isinstance(footwear, dict):
+            allowed_shoes = self.FOOTWEAR_FORMALITY_RULES.get(target_formality, [])
+            shoe_silhouette = footwear.get("silhouette", "").lower()
+
+            # Check if ANY allowed type appears in this shoe's silhouette string
+            shoe_ok = any(allowed in shoe_silhouette for allowed in allowed_shoes)
+
+            if not shoe_ok and shoe_silhouette:
+                issues.append(
+                    f"Footwear: '{footwear.get('item_name', '')}' "
+                    f"(silhouette: {shoe_silhouette}) may be too casual for "
+                    f"formality level {target_formality}. "
+                    f"Consider: {', '.join(allowed_shoes[:3])}"
+                )
+
+        # ── Check 2: bag formality ───────────────────────────────────────────
+        bag = outfit_dict.get("bag")
+        if bag and isinstance(bag, dict):
+            allowed_bags = self.BAG_FORMALITY_RULES.get(target_formality, [])
+            bag_silhouette = bag.get("silhouette", "").lower()
+            bag_ok = any(allowed in bag_silhouette for allowed in allowed_bags)
+
+            if not bag_ok and bag_silhouette:
+                issues.append(
+                    f"Bag: '{bag.get('item_name', '')}' may not suit "
+                    f"formality level {target_formality}. "
+                    f"Consider: {', '.join(allowed_bags[:2])}"
+                )
+
+        # ── Check 3: dupatta for ethnic outfits ──────────────────────────────
+        main_cat    = outfit_dict.get("main_item_category", "")
+        outerwear   = outfit_dict.get("outerwear")
+
+        if main_cat in self.ETHNIC_CATEGORIES_NEEDING_DUPATTA:
+            # Outerwear slot should contain a dupatta for these categories
+            has_dupatta = (
+                outerwear and isinstance(outerwear, dict) and
+                "dupatta" in outerwear.get("silhouette", "").lower()
+            )
+            if not has_dupatta:
+                issues.append(
+                    "Dupatta missing: ethnic outfit (lehenga/sharara/salwar) "
+                    "should include a dupatta. Consider adding a plain organza one."
+                )
+
+        is_valid = len(issues) == 0   # valid if no issues found
+        return is_valid, issues, outfit_dict
